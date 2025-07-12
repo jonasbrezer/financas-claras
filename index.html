@@ -97,7 +97,7 @@
         /* Estilo para a bolinha de status na linha do tempo da transação */
         .transaction-bullet {
             position: absolute;
-            left: -27px; /* Ajustado para puxar o texto para a esquerda */
+            left: -6px; /* AJUSTADO: Para centralizar na linha mais grossa */
             top: 50%;
             transform: translateY(-50%);
             width: 24px; /* Tamanho da bolinha (w-6) */
@@ -113,9 +113,9 @@
         }
 
         .timeline-bullet-date {
-            left: 1.25rem; /* Centraliza com a linha da timeline */
+            /* left: 1.25rem; - Removido, usando pixel para precisão */
             position: absolute; /* Garantir que seja posicionado */
-            left: 1px; /* Ajustado para alinhar com o centro da linha do tempo */
+            left: -7px; /* AJUSTADO: Para centralizar na linha mais grossa */
             top: 0; /* Alinha com o topo do bloco de data */
             width: 26px;
             height: 26px;
@@ -277,7 +277,7 @@
         <main class="container mx-auto p-4 flex-grow pb-32 md:pb-8"> <!-- Ajustado: pb-24 para pb-32 em mobile -->
             <!-- Visão Geral (Dashboard) -->
             <section id="dashboard" class="page-section active">
-                <h2 class="text-3xl font-bold mb-2 text-[var(--color-heading-green)]">Visão Geral</h2>
+                <h2 class="text-3xl font-bold mb-2 text-[var(--color-heading-green)]">Visão Geral </h2>
                 <p class="text-gray-600 text-lg mb-6">Seu resumo financeiro rápido.</p>
 
                 <!-- Cards de Resumo da Visão Geral -->
@@ -380,7 +380,7 @@
                 <!-- Lista de Transações - Agrupadas por Data (agora dinâmicas) -->
                 <div id="transactions-list-container" class="relative">
                     <!-- Linha do tempo vertical sutil -->
-                    <div class="absolute left-3 top-0 bottom-0 w-0.5 bg-gray-200"></div>
+                    <div class="absolute left-1 top-0 bottom-0 w-1 bg-gray-200"></div>
                     <!-- Transações serão renderizadas aqui pelo JavaScript -->
                     <p class="text-center text-gray-500 py-4" id="no-transactions-message">Nenhuma transação cadastrada ainda.</p>
                 </div>
@@ -1588,7 +1588,7 @@
             // Exibe mensagem de status para salvar categoria
             function displayCategorySaveStatus(message, type = 'info') {
                 categorySaveStatusMessage.textContent = message;
-                categorySaveStatusMessage.classList.remove('hidden', 'text-green-700', 'text-red-700', 'text-blue-700');
+                categorySaveStatusStatusMessage.classList.remove('hidden', 'text-green-700', 'text-red-700', 'text-blue-700');
                 if (type === 'success') {
                     categorySaveStatusMessage.classList.add('text-green-700');
                 } else if (type === 'error') {
@@ -1702,7 +1702,7 @@
                             }
                             await saveCategories();
                             // if(transactionModal.classList.contains('active')) { // Removido, a lógica de populate é no goToStep(2)
-                            //     populateTransactionCategories(document.querySelector('input[name="transaction-type']:checked').value);
+                            //     populateTransactionCategories(document.querySelector('input[name="transaction-type"]:checked').value);
                             // }
                             updateDashboardAndTransactionSummaries();
                         }
@@ -1763,7 +1763,7 @@
             // Renderiza as transações
             function renderTransactions() {
                 transactionsListContainer.innerHTML = `
-                    <div class="absolute left-3 top-0 bottom-0 w-0.5 bg-gray-200"></div>
+                    <div class="absolute left-1 top-0 bottom-0 w-1 bg-gray-200"></div>
                 `; 
 
                 if (transactions.length === 0) {
@@ -2394,7 +2394,7 @@
                             t.categoryId === budget.categoryId && t.type === 'expense' && (t.status === 'Pago' || t.status === 'Recebido' || t.status === 'Confirmado')
                         ).reduce((sum, t) => sum + parseFloat(t.amount), 0);
                         const remaining = budget.amount - actualSpent;
-                        dataString += `- ${categoryName}: Orçado ${formatCurrency(budget.amount)}, Gasto ${formatCurrency(actualSpent)}, Restante ${formatCurrency(remaining)}<br>`;
+                        budgetDataString += `- ${categoryName}: Orçado ${formatCurrency(budget.amount)}, Gasto ${formatCurrency(actualSpent)}, Restante ${formatCurrency(remaining)}<br>`;
                     });
                 } else {
                     dataString += "Nenhum orçamento configurado.<br>";
