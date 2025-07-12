@@ -1,0 +1,214 @@
+:root {
+    --color-blue-light: hsl(210, 20%, 95%);
+    --color-blue-primary: hsl(210, 70%, 50%);
+    --color-cyan-accent: hsl(180, 60%, 40%);
+    --color-text-dark: #334155;
+    --color-green-positive: #22C55E;
+    --color-red-negative: #EF4444;
+    --color-option-icon-green: #308053;
+    --color-heading-green: #308053;
+}
+
+/* Corpo */
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: var(--color-blue-light);
+    color: var(--color-text-dark);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: 'Poppins', sans-serif;
+    color: var(--color-text-dark);
+}
+
+/* Barra de navegação inferior (mobile) */
+.mobile-nav-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background-color: white;
+    box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.1);
+    z-index: 1000;
+    display: flex;
+    justify-content: space-around;
+    padding: 8px 0;
+    border-top-left-radius: 1rem;
+    border-top-right-radius: 1rem;
+}
+
+.mobile-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    color: var(--color-text-dark);
+    text-decoration: none;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border-radius: 0.5rem;
+    transition: background-color 0.2s ease;
+}
+.mobile-nav-item.active {
+    color: var(--color-blue-primary);
+    background-color: hsla(210, 70%, 50%, 0.1);
+}
+.mobile-nav-item.active i {
+    color: var(--color-blue-primary);
+}
+.mobile-nav-item:hover {
+    background-color: rgba(0,0,0,0.05);
+}
+
+.page-section {
+    display: none;
+}
+.page-section.active {
+    display: block;
+}
+
+@layer base {
+    [data-page="dashboard"] .active .mobile-nav-item {
+        --tw-text-opacity: 1;
+        color: var(--color-blue-primary);
+    }
+}
+
+/* Bolinha de status na linha do tempo da transação */
+.transaction-bullet {
+    position: absolute;
+    left: -27px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    z-index: 10;
+    box-sizing: border-box;
+    background-color: var(--color-blue-light);
+}
+.transaction-bullet.paid {
+    border: none;
+}
+.timeline-bullet-date {
+    left: 1.25rem;
+    position: absolute;
+    left: 1px;
+    top: 0;
+    width: 26px;
+    height: 26px;
+    background-color: #CBD5E1;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+}
+
+/* Modal */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1001;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.4);
+    align-items: center;
+    justify-content: center;
+}
+.modal.active {
+    display: flex;
+}
+.modal-content {
+    background-color: #fefefe;
+    margin: auto;
+    padding: 20px;
+    border-radius: 0.75rem;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    position: relative;
+}
+.close-button {
+    color: #aaa;
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+.close-button:hover,
+.close-button:focus {
+    color: black;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+/* Modal de confirmação */
+.confirmation-modal-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+.confirmation-modal-buttons button {
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.5rem;
+    font-weight: 500;
+    transition: background-color 0.2s ease;
+}
+.confirmation-modal-buttons .confirm-delete {
+    background-color: #EF4444;
+    color: white;
+}
+.confirmation-modal-buttons .confirm-delete:hover {
+    background-color: #DC2626;
+}
+.confirmation-modal-buttons .cancel-delete {
+    background-color: #E5E7EB;
+    color: #374151;
+}
+.confirmation-modal-buttons .cancel-delete:hover {
+    background-color: #D1D5DB;
+}
+
+/* Botões de tipo na Etapa 1 do modal de transação */
+.step-1-type-button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background-color: white;
+    border: 1px solid #E5E7EB;
+    border-radius: 0.75rem;
+    padding: 1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+.step-1-type-button:hover {
+    border-color: var(--color-blue-primary);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transform: translateY(-2px);
+}
+.step-1-type-button.selected {
+    border-color: var(--color-blue-primary);
+    background-color: hsla(210, 70%, 50%, 0.1);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+.step-container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+/* Adicione aqui o restante do CSS do seu <style>, mantendo tudo igual ao original */
+/* ... O arquivo style.css deve conter 100% das regras CSS originais ... */
