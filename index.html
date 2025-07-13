@@ -159,10 +159,9 @@
             position: absolute;
             top: 10px;
             right: 10px;
-            font-size: 36px; /* AUMENTADO para mobile */
+            font-size: 28px;
             font-weight: bold;
             cursor: pointer;
-            padding: 5px; /* Adicionado padding para facilitar o clique */
         }
         .close-button:hover,
         .close-button:focus {
@@ -794,15 +793,15 @@
         <div class="modal-content">
             <span class="close-button" id="close-api-keys-modal">&times;</span>
             <h3 class="text-2xl font-bold mb-4 text-gray-900">Gerenciar Chave de API Gemini</h3>
-            <p class="text-gray-600 mb-6">Você pode adicionar até 5 chaves de API. O sistema usará a primeira chave válida disponível.</p>
-            <div id="api-keys-input-container" class="space-y-4 mb-4">
-                <!-- Campos de chave de API serão gerados aqui -->
+            <div class="mb-4">
+                <label for="modal-api-key" class="block text-sm font-medium text-gray-700 mb-1">Sua Chave de API Gemini</label>
+                <input type="text" id="modal-api-key" class="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]" placeholder="Cole sua chave de API aqui...">
             </div>
             <div id="api-modal-status-message" class="p-3 rounded-md border text-sm hidden">
                 <p id="api-modal-message-text"></p>
             </div>
             <div class="flex justify-end mt-4 space-x-4">
-                <button type="button" id="save-api-keys-modal-button" class="px-6 py-3 bg-[var(--color-blue-primary)] text-white font-medium rounded-lg hover:bg-blue-600">Salvar Chaves</button>
+                <button type="button" id="save-api-keys-modal-button" class="px-6 py-3 bg-[var(--color-blue-primary)] text-white font-medium rounded-lg hover:bg-blue-600">Salvar Chave</button>
             </div>
         </div>
     </div>
@@ -871,8 +870,7 @@
             depth: 50     // Valor de 0 a 100
         };
 
-        let geminiApiKeys = []; // AGORA É UM ARRAY DE CHAVES
-        let currentApiKeyIndex = 0; // Para alternar entre as chaves
+        let geminiApiKey = ''; 
         let chatHistory = []; 
         let isSendingMessage = false;
         let isGeminiApiReady = false; 
@@ -1083,7 +1081,7 @@
 
             // Elementos do Modal de Otimização de Orçamento
             const budgetOptimizationModal = document.getElementById('budget-optimization-modal');
-            const closeBudgetOptimizationModalButton = document.getElementById('close-budget-optimization-modal');
+            const closeBudgetOptimizationModalButton = document.getElementById('budget-optimization-modal');
             const closeBudgetOptimizationButton = document.getElementById('close-budget-optimization-button');
             const budgetOptimizationContent = document.getElementById('budget-optimization-content');
             const budgetOptimizationLoadingIndicator = document.getElementById('budget-optimization-loading-indicator');
@@ -1094,7 +1092,7 @@
             const apiManagementLink = document.querySelector('[data-page="api-management"]');
             const apiKeysModal = document.getElementById('api-keys-modal');
             const closeApiKeysModalButton = document.getElementById('close-api-keys-modal');
-            const apiKeysInputContainer = document.getElementById('api-keys-input-container'); // NOVO: Container para múltiplas chaves
+            const modalApiKeyInput = document.getElementById('modal-api-key');
             const saveApiKeysModalButton = document.getElementById('save-api-keys-modal-button');
             const apiModalStatusMessageDiv = document.getElementById('api-modal-status-message');
             const apiModalMessageText = document.getElementById('api-modal-message-text');
@@ -1109,7 +1107,7 @@
 
             // Elementos do novo Modal de Orçamento
             const budgetModal = document.getElementById('budget-modal');
-            const closeBudgetModal = document.getElementById('close-budget-modal'); // Renomeado para evitar conflito
+            const closeBudgetModalButton = document.getElementById('close-budget-modal');
             const cancelBudgetButton = document.getElementById('cancel-budget-button');
             const budgetForm = document.getElementById('budget-form');
             const budgetIdInput = document.getElementById('budget-id');
@@ -1187,29 +1185,42 @@
                 });
 
                 // Listener para Transações - Usa getUserCollectionRef
-                onSnapshot(getUserCollectionRef('transactions'), (snapshot) => {
-                    transactions = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                    console.log("Transações carregadas do Firestore.");
-                    renderTransactions();
-                    updateDashboardAndTransactionSummaries();
-                    renderExpenseChart();
-                }, (error) => {
-                    console.error("Erro ao carregar Transações do Firestore:", error);
-                });
+                const transactionsColRef = getUserCollectionRef('transactions');
+                if (transactionsColRef) { // Verifica se a referência foi criada com sucesso
+                    onSnapshot(query(transactionsColRef, orderBy('date', 'desc')), (querySnapshot) => {
+                        transactions = [];
+                        querySnapshot.forEach((doc) => {
+                            transactions.push({ id: doc.id, ...doc.data() });
+                        });
+                        console.log("Transações carregadas do Firestore.");
+                        renderTransactions();
+                        updateDashboardAndTransactionSummaries();
+                        renderExpenseChart(); // Adicionar chamada para o gráfico
+                    }, (error) => {
+                        console.error("Erro ao carregar Transações do Firestore:", error);
+                    });
+                }
 
-                // Listener para Chave de API Gemini - NOVO (AGORA É UM ARRAY)
-                onSnapshot(getUserDocumentRef('settings', 'geminiApiKeys'), (docSnap) => {
-                    if (docSnap.exists() && docSnap.data().keys) {
-                        geminiApiKeys = docSnap.data().keys;
-                        console.log("Chaves de API Gemini carregadas do Firestore.");
+                // Listener para Chave de API Gemini - NOVO
+                onSnapshot(getUserDocumentRef('settings', 'geminiApiKey'), (docSnap) => {
+                    if (docSnap.exists() && docSnap.data().key) {
+                        geminiApiKey = docSnap.data().key;
+                        modalApiKeyInput.value = geminiApiKey;
+                        updateApiModalStatus(`Chave de API carregada: ${geminiApiKey.substring(0, 10)}...`, 'info');
+                        isGeminiApiReady = true;
+                        console.log("Chave de API Gemini carregada do Firestore.");
                     } else {
-                        geminiApiKeys = [];
-                        console.log("Chaves de API Gemini não encontradas no Firestore.");
+                        geminiApiKey = '';
+                        updateApiModalStatus("Nenhuma chave de API salva ainda. Por favor, insira e salve.", "info");
+                        isGeminiApiReady = false;
+                        console.log("Chave de API Gemini não encontrada no Firestore.");
                     }
                     updateChatUIState();
                 }, (error) => {
-                    console.error("Erro ao carregar Chaves de API Gemini do Firestore:", error);
-                    geminiApiKeys = [];
+                    console.error("Erro ao carregar Chave de API Gemini do Firestore:", error);
+                    geminiApiKey = '';
+                    updateApiModalStatus(`Erro ao carregar chave de API: ${error.message}`, "error");
+                    isGeminiApiReady = false;
                     updateChatUIState();
                 });
             }
@@ -1263,19 +1274,15 @@
             }
 
             // Salva uma transação individual no Firestore (adicione ou atualize)
-            async function saveTransactionToFirestore(transactionData) {
+            async function saveTransaction(transactionData) {
                 if (!isAuthReady || !userId) { console.warn("Autenticação não pronta ou userId ausente."); return; }
                 try {
                     const transactionsColRef = getUserCollectionRef('transactions');
                     if (transactionsColRef) {
                         if (transactionData.id) {
-                            // Se já tem ID, é uma edição, usa setDoc para atualizar o documento existente
                             await setDoc(doc(db, `artifacts/${appId}/users/${userId}/transactions`, transactionData.id), transactionData);
-                            console.log("Transação atualizada no Firestore:", transactionData.id);
                         } else {
-                            // Se não tem ID, é uma nova transação, usa addDoc para criar um novo documento
                             await addDoc(transactionsColRef, transactionData);
-                            console.log("Nova transação adicionada ao Firestore.");
                         }
                     }
                 } catch (error) {
@@ -1306,34 +1313,30 @@
                 }
             }
 
-            // Salva as chaves da API Gemini no Firestore (AGORA É UM ARRAY)
-            async function saveApiKeys() {
+            // Salva a chave da API Gemini no Firestore - ATUALIZADO
+            async function saveApiKey() {
                 if (!isAuthReady || !userId) { 
-                    updateApiModalStatus("Erro: Autenticação não pronta para salvar as chaves de API.", "error");
+                    updateApiModalStatus("Erro: Autenticação não pronta para salvar a chave de API.", "error");
                     return; 
                 }
-                const newKeys = [];
-                // Coleta todas as chaves dos inputs
-                document.querySelectorAll('.gemini-api-key-input').forEach(input => {
-                    const key = input.value.trim();
-                    if (key) {
-                        newKeys.push(key);
-                    }
-                });
-
+                const keyToSave = modalApiKeyInput.value.trim();
+                if (!keyToSave) {
+                    updateApiModalStatus("Por favor, insira uma chave de API válida.", "error");
+                    return;
+                }
                 try {
-                    const apiKeysRef = getUserDocumentRef('settings', 'geminiApiKeys');
-                    if (apiKeysRef) {
-                        await setDoc(apiKeysRef, { keys: newKeys });
-                        geminiApiKeys = newKeys; // Atualiza o array global
-                        updateApiModalStatus("Chaves de API salvas com sucesso! &#x1F389;", "success");
-                        isGeminiApiReady = newKeys.length > 0;
+                    const apiKeyRef = getUserDocumentRef('settings', 'geminiApiKey');
+                    if (apiKeyRef) {
+                        await setDoc(apiKeyRef, { key: keyToSave });
+                        geminiApiKey = keyToSave;
+                        updateApiModalStatus("Chave de API salva com sucesso! &#x1F389;", "success");
+                        isGeminiApiReady = true;
                         updateChatUIState();
-                        console.log("Chaves de API Gemini salvas no Firestore.");
+                        console.log("Chave de API Gemini salva no Firestore.");
                     }
                 } catch (error) {
-                    console.error("Erro ao salvar Chaves de API Gemini no Firestore:", error);
-                    updateApiModalStatus(`Erro ao salvar chaves de API: ${error.message}`, "error");
+                    console.error("Erro ao salvar Chave de API Gemini no Firestore:", error);
+                    updateApiModalStatus(`Erro ao salvar chave de API: ${error.message}`, "error");
                 }
             }
             // --- FIM das Funções de Persistência (Firebase Firestore) ---
@@ -1666,7 +1669,11 @@
                     categories.push(newCategory);
                 }
                 await saveCategories();
-                closeCategoryModal(); // Fechar a caixinha ao salvar
+                
+                if(transactionModal.classList.contains('active')) {
+                    // populateTransactionCategories(document.querySelector('input[name="transaction-type"]:checked').value); // Removido, a lógica de populate é no goToStep(2)
+                }
+                closeCategoryModal(); // Fecha o modal após salvar
             });
 
             // Lida com cliques nos botões de editar/excluir categorias (delegação de eventos)
@@ -1691,9 +1698,12 @@
                                 t.categoryId = 'unknown'; // Define como categoria desconhecida
                                 t.transactionType = null; // Limpa o tipo de transação se for caixinha
                                 t.caixinhaId = null; // Limpa o ID da caixinha
-                                await saveTransactionToFirestore(t);
+                                await saveTransaction(t);
                             }
                             await saveCategories();
+                            // if(transactionModal.classList.contains('active')) { // Removido, a lógica de populate é no goToStep(2)
+                            //     populateTransactionCategories(document.querySelector('input[name="transaction-type']:checked').value);
+                            // }
                             updateDashboardAndTransactionSummaries();
                         }
                     );
@@ -1988,11 +1998,7 @@
                     
                     // Preenche a categoria e o status
                     populateTransactionCategories(typeToSelect);
-                    // Usar setTimeout para garantir que as opções foram populadas antes de tentar selecionar
-                    setTimeout(() => {
-                        transactionCategorySelect.value = transaction.categoryId;
-                    }, 0);
-                    
+                    transactionCategorySelect.value = transaction.categoryId;
                     updateTransactionStatusOptions(typeToSelect);
                     // O status é marcado na goToStep(4)
 
@@ -2052,22 +2058,6 @@
 
                 transactionCategoryType = selectedCategory.type;
 
-                // Lógica para reverter o impacto da transação antiga na caixinha (se for uma edição)
-                if (id) {
-                    const oldTransaction = transactions.find(t => t.id === id);
-                    if (oldTransaction && oldTransaction.type === 'caixinha' && oldTransaction.caixinhaId) {
-                        const oldCaixinha = categories.find(c => c.id === oldTransaction.caixinhaId);
-                        if (oldCaixinha) {
-                            if (oldTransaction.transactionType === 'deposit') {
-                                oldCaixinha.savedAmount = (oldCaixinha.savedAmount || 0) - parseFloat(oldTransaction.amount);
-                            } else if (oldTransaction.transactionType === 'withdraw') {
-                                oldCaixinha.savedAmount = (oldCaixinha.savedAmount || 0) + parseFloat(oldTransaction.amount);
-                            }
-                        }
-                    }
-                }
-
-                // Aplica o impacto da nova transação na caixinha (se aplicável)
                 if (selectedCategory.type === 'caixinha') {
                     // Se a categoria é uma caixinha, o 'type' da transação será 'caixinha'
                     // e 'transactionTypeForCaixinha' será 'deposit' ou 'withdraw'
@@ -2106,8 +2096,8 @@
                     newTransaction.caixinhaId = selectedCategory.id; // O ID da caixinha é o ID da categoria
                 }
 
-                await saveTransactionToFirestore(newTransaction);
-                closeTransactionModal(); // Fechar a caixinha ao salvar
+                await saveTransaction(newTransaction);
+                closeTransactionModal();
             });
 
             // Lida com cliques nos botões de editar/excluir transações (delegação de eventos)
@@ -2268,8 +2258,7 @@
                 budgetOptimizationText.innerHTML = '';
                 budgetOptimizationLoadingIndicator.classList.remove('hidden');
 
-                const currentApiKey = getValidGeminiApiKey();
-                if (!currentApiKey) {
+                if (!isGeminiApiReady || !geminiApiKey) {
                     budgetOptimizationText.innerHTML = '<p class="text-red-500">O assistente de IA não está configurado. Por favor, insira sua chave de API Gemini nas "Mais Opções".</p>';
                     budgetOptimizationLoadingIndicator.classList.add('hidden');
                     return;
@@ -2293,14 +2282,14 @@
                 budgetDataString += "<br>--- Fim dos Dados de Orçamento ---<br><br>";
 
                 const optimizationPrompt =
-                    `Com base nos seguintes dados de orçamento do utilizador, forneça sugestões claras e acionáveis para otimizar os gastos e gerir melhor o dinheiro. ` +
-                    `Seja direto, prático e objetivo, como um consultor financeiro que não hesita em apontar onde o utilizador pode melhorar. ` +
+                    `Com base nos seguintes dados de orçamento do usuário, forneça sugestões claras e acionáveis para otimizar os gastos e gerenciar melhor o dinheiro. ` +
+                    `Seja direto, prático e objetivo, como um consultor financeiro que não hesita em apontar onde o usuário pode melhorar. ` +
                     `Use títulos em negrito (<strong>), listas não ordenadas (<ul>, <li>) e quebras de linha (<br>). ` +
                     `NUNCA use Markdown (*, **, _, #, etc.). ` +
                     `Aqui estão os dados: <br><br>${budgetDataString}`;
 
                 try {
-                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${currentApiKey}`;
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`;
                     
                     const payload = {
                         contents: [{ role: "user", parts: [{ text: optimizationPrompt }] }],
@@ -2338,7 +2327,7 @@
                         budgetOptimizationText.innerHTML = '<p class="text-red-500">Não foi possível gerar sugestões de otimização de orçamento neste momento.</p>';
                     }
                 } catch (error) {
-                    budgetOptimizationText.innerHTML = `<p class="text-red-500">Erro ao comunicar com a IA para otimização. Verifique a sua conexão. Detalhes: ${error.message || 'Erro desconhecido'}</p>`;
+                    budgetOptimizationText.innerHTML = `<p class="text-red-500">Erro ao comunicar com a IA para otimização. Verifique sua conexão. Detalhes: ${error.message || 'Erro desconhecido'}</p>`;
                     console.error('Erro ao chamar a API Gemini para Otimização de Orçamento:', error);
                 } finally {
                     budgetOptimizationLoadingIndicator.classList.add('hidden');
@@ -2439,7 +2428,7 @@
                         dataString += `- ${new Date(t.date + 'T12:00:00').toLocaleDateString('pt-BR')}: ${t.description}, ${amountPrefix} ${formatCurrency(t.amount)} ${categoryDisplay} [Tipo: ${transactionTypeDetail}, Status: ${t.status}]<br>`;
                     });
                 } else {
-                    dataString += "Nenhuma transação registada.<br>";
+                    dataString += "Nenhuma transação registrada.<br>";
                 }
                 dataString += "<br>--- Fim dos Dados Financeiros ---<br><br>";
                 return dataString;
@@ -2462,22 +2451,6 @@
                 return "Muito Detalhada";
             }
 
-            // Função para obter uma chave de API válida e alternar entre elas (NOVO)
-            function getValidGeminiApiKey() {
-                if (geminiApiKeys.length === 0) {
-                    return null;
-                }
-                // Tenta encontrar a próxima chave válida em um ciclo
-                for (let i = 0; i < geminiApiKeys.length; i++) {
-                    const key = geminiApiKeys[currentApiKeyIndex];
-                    currentApiKeyIndex = (currentApiKeyIndex + 1) % geminiApiKeys.length; // Prepara para a próxima
-                    if (key && key.trim() !== '') {
-                        return key;
-                    }
-                }
-                return null; // Nenhuma chave válida encontrada
-            }
-
 
             async function sendChatMessage(userMessage) {
                 if (isSendingMessage) {
@@ -2486,9 +2459,9 @@
 
                 if (userMessage.trim() === '') return;
 
-                const currentApiKey = getValidGeminiApiKey();
-                if (!currentApiKey) {
-                    appendMessage('ai', 'O assistente de IA não está configurado. Por favor, insira a sua chave da API Gemini nas "Mais Opções".', 'error');
+                // Check if the Gemini API is confirmed ready
+                if (!isGeminiApiReady || !geminiApiKey) {
+                    appendMessage('ai', 'O assistente de IA não está configurado. Por favor, insira sua chave da API Gemini nas "Mais Opções".', 'error');
                     console.error("Gemini API not ready to send message or API key missing.");
                     return;
                 }
@@ -2504,18 +2477,17 @@
                 let currentDepth = getDepthLabel(aiConfig.depth);
 
                 const baseSystemInstruction =
-                    `Você é meu assistente financeiro pessoal, especializado em organização de gastos, planeamento financeiro e educação financeira. Acompanho os seus dados em tempo real e uso regras como a 50-30-20 para o ajudar a tomar decisões mais inteligentes com o seu dinheiro. O meu papel é analisar as suas entradas e saídas, identificar padrões, avisá-lo quando sair do ideal e propor ajustes práticos. Se tiver dinheiro a sobrar, mostro como usar com inteligência. Se faltar, mostro-lhe onde cortar. Se não tiver registado os seus gastos do dia ou não tiver dados suficientes, vou lembrá-lo de atualizar. Sem informação, não consigo orientá-lo. O meu objetivo é ser o cérebro da sua vida financeira — mas preciso que o alimente.` +
-                    `\n\nA sua personalidade: ${currentSympathy}. A sua profundidade de resposta: ${currentDepth}. ` +
-                    `Quando tiver que dar uma notícia ruim ou um feedback direto, não floreie, vá direto ao ponto. Após entregar a realidade, seja construtivo e ofereça sugestões claras para melhorar. Se o utilizador não tiver dados suficientes para uma análise aprofundada, informe de forma clara que mais dados são necessários. A sua função é educar e otimizar, não suavizar a realidade financeira. Use emojis com moderação e apenas para dar um leve toque de leveza após uma informação séria ou para realçar um ponto positivo/ação recomendada.` +
-                    `\n\n<strong>Personagem Adicional:</strong> ${currentPersona}<br>` + // Adicionado o campo persona
+                    `Você é meu assistente financeiro pessoal, especializado em organização de gastos, planejamento financeiro e educação financeira. Acompanho seus dados em tempo real e uso regras como a 50-30-20 para te ajudar a tomar decisões mais inteligentes com o seu dinheiro. Meu papel é analisar suas entradas e saídas, identificar padrões, te avisar quando você sair do ideal e propor ajustes práticos. Se tiver dinheiro sobrando, mostro como usar com inteligência. Se faltar, te mostro onde cortar. Se você não tiver registrado seus gastos do dia ou não tiver dados o suficiente, vou te lembrar de atualizar. Sem informação, não consigo te orientar. Meu objetivo é ser o cérebro da sua vida financeira — mas preciso que você alimente ele.` +
+                    `\n\nSua personalidade: ${currentSympathy}. Sua profundidade de resposta: ${currentDepth}. ` +
+                    `Quando tiver que dar uma notícia ruim ou um feedback direto, não floreie, vá direto ao ponto. Após entregar a realidade, seja construtivo e ofereça sugestões claras para melhorar. Se o usuário não tiver dados suficientes para uma análise aprofundada, informe de forma clara que mais dados são necessários. Sua função é educar e otimizar, não suavizar a realidade financeira. Use emojis com moderação e apenas para dar um leve toque de leveza após uma informação séria ou para realçar um ponto positivo/ação recomendada.` +
                     `\n\nPadrões de Resposta e Interação:` +
                     `\n- <strong>Sem Markdown</strong>: NUNCA use *, **, _, #, ou qualquer outro caractere Markdown. Use HTML básico para formatação: <strong> para negrito, <br> para quebra de linha, <ul> para listas não ordenadas, e <li> para itens de lista. Para listas, use traços simples como marcadores: "- Item 1".<br>` +
                     `\n- <strong>Respostas enxutas e úteis</strong>: Não jogue informações em excesso. Sempre responda apenas o necessário, com clareza e objetividade.<br>` +
                     `\n- <strong>Mostre apenas o necessário</strong>: Se for relevante para a pergunta, mostre apenas o essencial para ajudar na tomada de decisão. Por exemplo: "Você gastou R$ 300 com Ifood este mês. Isso é 30% do seu salário de R$ 1.000."<br>` +
-                    `\n- <strong>Nunca mostre dados técnicos sem necessidade</strong>: Não exiba códigos de cor, tipos de ID, ou estruturas internas de dados (como isCaixinhaTransaction, categoryId, caixinhaId), a não ser que o utilizador peça diretamente por detalhes técnicos.<br>` +
-                    `\n- <strong>Tome iniciativa útil</strong>: Se o utilizador disser algo como "Entendi", "Beleza", "Ok", ou similares, continue a conversa com sugestões diretas e pertinentes ao contexto anterior. Não reinicie a conversa de forma genérica.<br>` +
-                    `\n\n<strong>Ambiente Técnico</strong>: Este assistente roda em um ficheiro HTML local e agora utiliza o Firebase Firestore para armazenar dados. A IA deve estar totalmente configurada no código-fonte e através dos dados carregados do Firestore.<br>` +
-                    `\n\n<strong>Objetivo Final</strong>: Seja o cérebro financeiro pessoal do utilizador, com total clareza, iniciativa e foco. Evite poluir a tela com dados excessivos, mantenha a conversa no contexto correto e tome decisões junto com o utilizador. Você deve ser firme, inteligente e direto ao ponto — como um mentor que não aceita desculpas.`;
+                    `\n- <strong>Nunca mostre dados técnicos sem necessidade</strong>: Não exiba códigos de cor, tipos de ID, ou estruturas internas de dados (como isCaixinhaTransaction, categoryId, caixinhaId), a não ser que o usuário peça diretamente por detalhes técnicos.<br>` +
+                    `\n- <strong>Tome iniciativa útil</strong>: Se o usuário disser algo como "Entendi", "Beleza", "Ok", ou similares, continue a conversa com sugestões diretas e pertinentes ao contexto anterior. Não reinicie a conversa de forma genérica.<br>` +
+                    `\n\n<strong>Ambiente Técnico</strong>: Este assistente roda em um arquivo HTML local e agora utiliza o Firebase Firestore para armazenar dados. A IA deve estar totalmente configurada no código-fonte e através dos dados carregados do Firestore.<br>` +
+                    `\n\n<strong>Objetivo Final</strong>: Seja o cérebro financeiro pessoal do usuário, com total clareza, iniciativa e foco. Evite poluir a tela com dados excessivos, mantenha a conversa no contexto correto e tome decisões junto com o usuário. Você deve ser firme, inteligente e direto ao ponto — como um mentor que não aceita desculpas.`;
 
 
                 let currentFinancialData = '';
@@ -2529,9 +2501,9 @@
                     lastFinancialDataString = currentFinancialData;
                     hasConsultedFinancialData = true;
                     if (needsRefresh) {
-                         appendMessage('ai', 'Dados financeiros atualizados. Diga como posso ajudá-lo com isso.', 'info');
+                         appendMessage('ai', 'Dados financeiros atualizados. Diga como posso te ajudar com isso.', 'info');
                     } else {
-                         appendMessage('ai', 'A carregar e a analisar os seus dados financeiros para a nossa conversa. Isso pode levar um momento...', 'info');
+                         appendMessage('ai', 'Carregando e analisando seus dados financeiros para a nossa conversa. Isso pode levar um momento...', 'info');
                     }
                 } else {
                     currentFinancialData = lastFinancialDataString;
@@ -2543,7 +2515,7 @@
                                          userMessage;
 
                 try {
-                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${currentApiKey}`;
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`;
                     
                     const contentsPayload = [
                         { role: "user", parts: [{ text: finalPromptForAI }] }
@@ -2593,7 +2565,7 @@
                     }
                 } catch (error) {
                     console.error('Erro ao chamar a API Gemini:', error);
-                    appendMessage('ai', `Erro de comunicação com a IA. Verifique a sua conexão e chave de API. Detalhes: ${error.message || 'Erro desconhecido'}`, 'error');
+                    appendMessage('ai', `Erro de comunicação com a IA. Verifique sua conexão e chave de API. Detalhes: ${error.message || 'Erro desconhecido'}`, 'error');
                 } finally {
                     chatLoadingIndicator.classList.add('hidden');
                     chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
@@ -2608,9 +2580,8 @@
                 insightsText.innerHTML = '';
                 insightsLoadingIndicator.classList.remove('hidden');
 
-                const currentApiKey = getValidGeminiApiKey();
-                if (!currentApiKey) {
-                    insightsText.innerHTML = '<p class="text-red-500">O assistente de IA não está configurado. Por favor, insira a sua chave de API Gemini nas "Mais Opções".</p>';
+                if (!isGeminiApiReady || !geminiApiKey) {
+                    insightsText.innerHTML = '<p class="text-red-500">O assistente de IA não está configurado. Por favor, insira sua chave de API Gemini nas "Mais Opções".</p>';
                     insightsLoadingIndicator.classList.add('hidden');
                     return;
                 }
@@ -2619,15 +2590,15 @@
                 const financialData = getFinancialDataForAI();
 
                 const insightPrompt =
-                    `Analise os seguintes dados financeiros do utilizador e forneça insights e recomendações úteis. ` +
+                    `Analise os seguintes dados financeiros do usuário e forneça insights e recomendações úteis. ` +
                     `Seja objetivo, encorajador e focado em ações práticas. ` +
                     `Estruture a resposta com títulos em negrito usando <strong>, listas não ordenadas com <ul> e <li>, e quebras de linha com <br>. ` +
-                    `Mantenha o tom de um assistente financeiro útil. ` +
+                    `Mantenha o tone de um assistente financeiro útil. ` +
                     `NUNCA use Markdown (*, **, _, #, etc.).` +
                     `Aqui estão os dados: <br><br>${financialData}`;
 
                 try {
-                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${currentApiKey}`;
+                    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`;
                     
                     const payload = {
                         contents: [{ role: "user", parts: [{ text: insightPrompt }] }],
@@ -2665,7 +2636,7 @@
                         insightsText.innerHTML = '<p class="text-red-500">Não foi possível gerar insights financeiros neste momento.</p>';
                     }
                 } catch (error) {
-                    insightsText.innerHTML = `<p class="text-red-500">Erro ao comunicar com a IA para insights. Verifique a sua conexão. Detalhes: ${error.message || 'Erro desconhecido'}</p>`;
+                    insightsText.innerHTML = `<p class="text-red-500">Erro ao comunicar com a IA para insights. Verifique sua conexão. Detalhes: ${error.message || 'Erro desconhecido'}</p>`;
                     console.error('Erro ao chamar a API Gemini para Insights:', error);
                 } finally {
                     insightsLoadingIndicator.classList.add('hidden');
@@ -2680,7 +2651,8 @@
             // --- Funções do Modal de Chave de API ---
             function openApiKeysModal() {
                 apiKeysModal.classList.add('active');
-                renderApiKeysInputs(); // Renderiza os inputs com as chaves atuais
+                // A chave será carregada automaticamente pelo onSnapshot em loadAllDataFromFirestore
+                // e o modalApiKeyInput.value será atualizado por ele.
             }
 
             function closeApiKeysModal() {
@@ -2698,27 +2670,12 @@
                     apiModalStatusMessageDiv.classList.add('bg-red-100', 'border-red-500', 'text-red-700');
                 }
                 
-                apiModalMessageText.innerHTML = message; // Use innerHTML para permitir emojis
+                apiModalMessageText.textContent = message;
                 apiModalStatusMessageDiv.classList.remove('hidden');
 
                 setTimeout(() => {
                     apiModalStatusMessageDiv.classList.add('hidden');
                 }, 5000);
-            }
-
-            // Renderiza os 5 campos de input para as chaves de API (NOVO)
-            function renderApiKeysInputs() {
-                apiKeysInputContainer.innerHTML = '';
-                for (let i = 0; i < 5; i++) {
-                    const key = geminiApiKeys[i] || '';
-                    const inputDiv = document.createElement('div');
-                    inputDiv.className = 'mb-2';
-                    inputDiv.innerHTML = `
-                        <label for="api-key-${i}" class="block text-sm font-medium text-gray-700 mb-1">Chave de API Gemini ${i + 1}</label>
-                        <input type="password" id="api-key-${i}" class="gemini-api-key-input w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]" placeholder="Insira a sua chave de API aqui" value="${key}">
-                    `;
-                    apiKeysInputContainer.appendChild(inputDiv);
-                }
             }
 
             // REMOVIDO: Event listener para salvar as configurações da IA (agora é automático)
@@ -2742,46 +2699,43 @@
                             isAuthReady = true;
                             loginScreen.classList.add('hidden');
                             appContent.classList.remove('hidden');
-                            console.log("Utilizador autenticado:", userId);
-                            // Garante que o carregamento de dados só ocorre após a autenticação
-                            await loadAllDataFromFirestore();
-                            showPage('dashboard');
+                            console.log("Usuário autenticado:", userId);
+                            setTimeout(async () => {
+                                await loadAllDataFromFirestore();
+                                showPage('dashboard');
+                            }, 100);
                         } else {
                             userId = null;
                             isAuthReady = false;
                             loginScreen.classList.remove('hidden');
                             appContent.classList.add('hidden');
-                            console.log("Utilizador não autenticado. A mostrar tela de login.");
+                            console.log("Usuário não autenticado. Mostrando tela de login.");
                         }
                     });
 
-                    // Tenta autenticar com o token inicial do Canvas se disponível
                     if (initialAuthToken) {
                         try {
                             await signInWithCustomToken(auth, initialAuthToken);
                             console.log("Autenticação com token inicial bem-sucedida.");
                         } catch (error) {
-                            console.error("Falha na autenticação com o token inicial:", error.code, error.message);
-                            loginErrorMessage.textContent = `Erro de autenticação com token: ${error.message}. Tentando login anónimo.`;
-                            loginErrorMessage.classList.remove('hidden');
-                            // Se o token inicial falhar, tenta o login anónimo como fallback
-                            try {
-                                await signInAnonymously(auth);
-                                console.log("Login anónimo bem-sucedido após falha do token inicial.");
-                            } catch (anonError) {
-                                console.error("Falha no login anónimo:", anonError.code, anonError.message);
-                                loginErrorMessage.textContent = `Erro crítico: ${anonError.message}. Verifique as configurações de autenticação do Firebase.`;
+                            if (error.code === 'auth/custom-token-mismatch') {
+                                console.error("Erro de autenticação com o token inicial: O token fornecido é inválido. Por favor, verifique as configurações do Firebase ou gere um novo token.", error);
+                                loginErrorMessage.textContent = `Erro de autenticação: O token fornecido é inválido. Por favor, verifique as configurações do Firebase ou gere um novo token.`;
+                                loginErrorMessage.classList.remove('hidden');
+                            } else {
+                                console.error("Falha na autenticação com o token inicial. Por favor, verifique as configurações do Firebase e o token.", error);
+                                loginErrorMessage.textContent = `Erro de autenticação: ${error.message}. Por favor, contacte o suporte ou verifique as configurações do Firebase.`;
                                 loginErrorMessage.classList.remove('hidden');
                             }
                         }
                     } else {
-                        // Se nenhum token inicial for fornecido, tenta o login anónimo
+                        // If no initialAuthToken is provided, then attempt anonymous sign-in.
                         try {
                             await signInAnonymously(auth);
                             console.log("Nenhum token inicial fornecido. Login anónimo bem-sucedido.");
                         } catch (error) {
-                            console.error("Falha no login anónimo:", error.code, error.message);
-                            loginErrorMessage.textContent = `Erro crítico: ${error.message}. Verifique se a autenticação anónima está ativada no Firebase.`;
+                            console.error("Falha no login anónimo. Por favor, verifique se a autenticação anónima está ativada no Firebase.", error);
+                            loginErrorMessage.textContent = `Erro de autenticação anónima: ${error.message}. Por favor, contacte o suporte ou verifique as configurações do Firebase.`;
                             loginErrorMessage.classList.remove('hidden');
                         }
                     }
@@ -2793,8 +2747,6 @@
                          errorMessage = `Erro de autenticação: O token fornecido é inválido. Por favor, verifique as configurações do Firebase.`;
                     } else if (error.code === 'auth/admin-restricted-operation') {
                          errorMessage = `Erro de autenticação: A operação de login (anónimo ou com token) está restrita. Por favor, verifique as configurações de autenticação do seu projeto Firebase.`;
-                    } else if (error.code === 'auth/network-request-failed') {
-                        errorMessage = `Erro de rede: Verifique a sua conexão com a internet.`;
                     }
                     loginErrorMessage.textContent = errorMessage;
                     loginErrorMessage.classList.remove('hidden');
@@ -2812,18 +2764,16 @@
                         loginErrorMessage.classList.add('hidden'); // Limpa a mensagem de erro se o login for bem-sucedido
                     } catch (error) {
                         let message = 'Erro ao fazer login. Verifique o seu e-mail e palavra-passe.';
-                        if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+                        if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
                             message = 'E-mail ou palavra-passe inválidos.';
                         } else if (error.code === 'auth/invalid-email') {
                             message = 'Formato de e-mail inválido.';
                         } else if (error.code === 'auth/operation-not-allowed') {
                             message = 'A operação de login por e-mail/palavra-passe não está ativada no seu projeto Firebase.';
-                        } else if (error.code === 'auth/network-request-failed') {
-                            message = 'Erro de rede. Verifique a sua conexão com a internet.';
                         }
                         loginErrorMessage.textContent = message;
                         loginErrorMessage.classList.remove('hidden');
-                        console.error("Erro de login:", error.code, error.message);
+                        console.error("Erro de login:", error.message);
                     }
                 });
             }
@@ -2911,9 +2861,7 @@
 
             // Função para atualizar o estado da UI do chat (habilitado/desabilitado)
             function updateChatUIState() {
-                // Verifica se há pelo menos uma chave de API válida
-                const hasValidKey = geminiApiKeys.some(key => key && key.trim() !== '');
-                if (hasValidKey) {
+                if (geminiApiKey.trim() !== '') {
                     isGeminiApiReady = true;
                     chatInput.disabled = false;
                     sendButton.disabled = false;
@@ -3013,7 +2961,7 @@
                 closeApiKeysModalButton.addEventListener('click', closeApiKeysModal);
             }
             if (saveApiKeysModalButton) {
-                saveApiKeysModalButton.addEventListener('click', saveApiKeys);
+                saveApiKeysModalButton.addEventListener('click', saveApiKey);
             }
 
             // Listener para o campo Persona (NOVO)
@@ -3042,7 +2990,7 @@
 
             // Event listeners para o novo modal de orçamento
             document.getElementById('configure-budget-button').addEventListener('click', () => openBudgetModal());
-            closeBudgetModal.addEventListener('click', closeBudgetModal);
+            closeBudgetModalButton.addEventListener('click', closeBudgetModal);
             cancelBudgetButton.addEventListener('click', closeBudgetModal);
             budgetAmountInput.addEventListener('input', () => formatCurrencyInput(budgetAmountInput));
 
@@ -3081,7 +3029,7 @@
                     budgets.push(newBudget);
                 }
                 await saveBudgets(); // Função que salva o array 'budgets' no Firestore
-                closeBudgetModal(); // Fechar a caixinha ao salvar
+                closeBudgetModal();
             });
 
             // Adicione delegação de eventos para os botões de editar/excluir orçamentos
