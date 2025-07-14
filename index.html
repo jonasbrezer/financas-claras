@@ -269,38 +269,8 @@
 </head>
 <body class="min-h-screen flex flex-col">
 
-    <!-- Modal de Login (Ativo por padrão no início) -->
-    <div id="login-modal" class="modal active">
-        <div class="modal-content max-w-sm">
-            <h2 class="text-3xl font-bold mb-6 text-center text-gray-900">Bem-vindo(a) ao Finanças Claras</h2>
-            <form id="login-form" class="space-y-4">
-                <div>
-                    <label for="login-email" class="sr-only">Email</label>
-                    <input type="email" id="login-email" placeholder="Email"
-                           class="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]" required>
-                </div>
-                <div>
-                    <label for="login-password" class="sr-only">Senha</label>
-                    <input type="password" id="login-password" placeholder="Senha"
-                           class="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]" required>
-                </div>
-                <div id="login-error-message" class="text-red-500 text-sm text-center hidden"></div>
-                <button type="submit" id="login-button"
-                        class="w-full px-6 py-3 bg-[var(--color-blue-primary)] text-white font-medium rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-blue-primary)] transition duration-300 shadow-md">
-                    Entrar
-                </button>
-                <p class="text-center text-gray-600">
-                    Não tem uma conta?
-                    <button type="button" id="register-button" class="text-[var(--color-blue-primary)] hover:underline font-medium">
-                        Registre-se
-                    </button>
-                </p>
-            </form>
-        </div>
-    </div>
-
-    <!-- Conteúdo Principal da Aplicação (Escondido por padrão) -->
-    <div id="app-content" class="flex-grow flex flex-col hidden">
+    <!-- Conteúdo Principal da Aplicação -->
+    <div id="app-content" class="flex-grow flex flex-col">
         <!-- Cabeçalho Principal (Desktop) -->
         <header class="bg-white p-4 shadow-sm hidden md:block border-b border-gray-200">
             <div class="container mx-auto flex justify-between items-center">
@@ -895,7 +865,7 @@
     <script type="module">
         // Importa os módulos necessários do Firebase
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signOut, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signOut, onAuthStateChanged, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Variáveis globais do ambiente Canvas (preenchidas em tempo de execução)
@@ -1004,15 +974,6 @@
             // Seleciona todos os elementos que podem atuar como links de navegação.
             const navLinks = document.querySelectorAll('.nav-link, .mobile-nav-item, [data-page]');
             const pageSections = document.querySelectorAll('.page-section');
-
-            // Elementos do Login Modal
-            const loginModal = document.getElementById('login-modal');
-            const appContent = document.getElementById('app-content');
-            const loginForm = document.getElementById('login-form');
-            const loginEmailInput = document.getElementById('login-email');
-            const loginPasswordInput = document.getElementById('login-password');
-            const loginErrorMessage = document.getElementById('login-error-message');
-            const registerButton = document.getElementById('register-button');
 
             // Função para exibir um modal de confirmação customizado
             function showConfirmationModal(title, message, callback) {
@@ -1757,7 +1718,7 @@
                 await saveCategories();
                 
                 if(transactionModal.classList.contains('active')) {
-                    // populateTransactionCategories(document.querySelector('input[name="transaction-type"]:checked').value); // Removido, a lógica de populate é no goToStep(2)
+                    // populateTransactionCategories(document.querySelector('input[name="transaction-type']:checked').value); // Removido, a lógica de populate é no goToStep(2)
                 }
                 closeCategoryModal(); // Fecha o modal após salvar
             });
@@ -1788,7 +1749,7 @@
                             }
                             await saveCategories();
                             // if(transactionModal.classList.contains('active')) { // Removido, a lógica de populate é no goToStep(2)
-                            //     populateTransactionCategories(document.querySelector('input[name="transaction-type"]:checked').value);
+                            //     populateTransactionCategories(document.querySelector('input[name="transaction-type']:checked').value);
                             // }
                             updateDashboardAndTransactionSummaries();
                         }
@@ -2806,20 +2767,40 @@
                         if (user) {
                             userId = user.uid;
                             console.log("Usuário autenticado:", userId);
-                            loginModal.classList.remove('active');
-                            appContent.classList.remove('hidden');
-                            // Carrega os dados somente depois que o estado de autenticação estiver totalmente determinado e o userId definido
-                            setTimeout(async () => {
-                                await loadAllDataFromFirestore();
-                                showPage('dashboard');
-                            }, 100);
                         } else {
-                            userId = null; // Garante que userId esteja nulo se não houver usuário autenticado
-                            console.log("Usuário não autenticado. Exibindo tela de login.");
-                            loginModal.classList.add('active');
-                            appContent.classList.add('hidden');
+                            // Se nenhum usuário estiver logado (ex: primeira carga sem token, ou logout),
+                            // garante que um userId esteja disponível para operações do Firestore.
+                            // Isso permitirá a persistência anônima.
+                            if (!userId) { // Apenas gera se não estiver já definido por uma sessão anônima anterior
+                                userId = crypto.randomUUID();
+                                console.log("Usuário não autenticado. Usando ID temporário para persistência:", userId);
+                            }
+                            // Tenta o login anônimo se ainda não estiver logado.
+                            // Isso é importante para regras do Firestore que exigem `request.auth != null`.
+                            if (!auth.currentUser) {
+                                try {
+                                    await signInAnonymously(auth);
+                                    // Se o login anônimo for bem-sucedido, atualiza o userId para o UID anônimo real
+                                    if (auth.currentUser) {
+                                        userId = auth.currentUser.uid;
+                                        console.log("Login anónimo bem-sucedido. UID:", userId);
+                                    }
+                                } catch (anonError) {
+                                    console.error("Falha no login anónimo. Verifique se a autenticação anónima está ativada no Firebase:", anonError);
+                                    // Mesmo que o login anônimo falhe, continuamos com o UUID gerado,
+                                    // mas as operações do Firestore podem falhar se as regras exigirem autenticação.
+                                }
+                            }
                         }
-                        isAuthReady = true; // O estado de autenticação foi determinado
+                        isAuthReady = true; // O estado de autenticação foi determinado (usuário ou ID temporário/anônimo)
+                        // A tela de login não existe mais, então sempre mostra o conteúdo da aplicação
+                        document.getElementById('app-content').classList.remove('hidden'); 
+                        
+                        // Carrega os dados somente depois que o estado de autenticação estiver totalmente determinado e o userId definido
+                        setTimeout(async () => {
+                            await loadAllDataFromFirestore();
+                            showPage('dashboard');
+                        }, 100);
                     });
 
                     // Tenta fazer login com o token personalizado se fornecido
@@ -2833,74 +2814,19 @@
                             } else {
                                 console.error("Falha na autenticação com o token inicial. Por favor, verifique as configurações do Firebase e o token.", error);
                             }
-                            // Se a autenticação com token falhar, o onAuthStateChanged já vai mostrar o modal de login
                         }
+                    } else {
+                        // Se nenhum token inicial for fornecido, a lógica dentro de onAuthStateChanged
+                        // já tentará o login anônimo e definirá o userId. Não precisamos de um signInAnonymously aqui.
+                        console.log("Nenhum token inicial fornecido. O onAuthStateChanged lidará com o login.");
                     }
 
                 } catch (error) {
                     console.error("Erro ao inicializar Firebase:", error);
-                    loginErrorMessage.textContent = `Erro ao inicializar o Firebase: ${error.message}`;
-                    loginErrorMessage.classList.remove('hidden');
+                    // Como a tela de login foi removida, não há onde exibir a mensagem de erro de login
+                    // Apenas logamos o erro no console.
                 }
             }
-
-            // Funções de Login e Registro
-            async function handleLogin(email, password) {
-                try {
-                    await signInWithEmailAndPassword(auth, email, password);
-                    loginErrorMessage.classList.add('hidden');
-                    // onAuthStateChanged irá lidar com a transição para o app content
-                } catch (error) {
-                    let message = "Erro ao fazer login. Verifique suas credenciais.";
-                    if (error.code === 'auth/invalid-email') {
-                        message = "Email inválido.";
-                    } else if (error.code === 'auth/user-disabled') {
-                        message = "Usuário desativado.";
-                    } else if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-                        message = "Email ou senha incorretos.";
-                    }
-                    loginErrorMessage.textContent = message;
-                    loginErrorMessage.classList.remove('hidden');
-                    console.error("Erro de login:", error);
-                }
-            }
-
-            async function handleRegister(email, password) {
-                try {
-                    await createUserWithEmailAndPassword(auth, email, password);
-                    loginErrorMessage.classList.add('hidden');
-                    showConfirmationModal("Registro Bem-Sucedido", "Sua conta foi criada com sucesso! Você já está logado(a).", () => {});
-                    // onAuthStateChanged irá lidar com a transição para o app content
-                } catch (error) {
-                    let message = "Erro ao registrar. Tente novamente.";
-                    if (error.code === 'auth/email-already-in-use') {
-                        message = "Este email já está em uso.";
-                    } else if (error.code === 'auth/invalid-email') {
-                        message = "Email inválido.";
-                    } else if (error.code === 'auth/weak-password') {
-                        message = "A senha deve ter pelo menos 6 caracteres.";
-                    }
-                    loginErrorMessage.textContent = message;
-                    loginErrorMessage.classList.remove('hidden');
-                    console.error("Erro de registro:", error);
-                }
-            }
-
-            // Event listener para o formulário de login
-            loginForm.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                const email = loginEmailInput.value;
-                const password = loginPasswordInput.value;
-                await handleLogin(email, password);
-            });
-
-            // Event listener para o botão de registro
-            registerButton.addEventListener('click', async () => {
-                const email = loginEmailInput.value;
-                const password = loginPasswordInput.value;
-                await handleRegister(email, password);
-            });
-
 
             // Event listener para o botão de logout (desktop)
             if (logoutButtonDesktop) {
@@ -2908,7 +2834,8 @@
                     try {
                         await signOut(auth);
                         console.log("Utilizador desconectado com sucesso.");
-                        // onAuthStateChanged irá lidar com a transição para o login modal
+                        // Recarrega a página para resetar o estado e iniciar uma nova sessão anônima
+                        window.location.reload(); 
                     } catch (error) {
                         console.error("Erro ao desconectar:", error.message);
                     }
@@ -2921,7 +2848,8 @@
                     try {
                         await signOut(auth);
                         console.log("Utilizador desconectado com sucesso.");
-                        // onAuthStateChanged irá lidar com a transição para o login modal
+                        // Recarrega a página para resetar o estado e iniciar uma nova sessão anônima
+                        window.location.reload(); 
                     } catch (error) {
                         console.error("Erro ao desconectar:", error.message);
                     }
