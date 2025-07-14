@@ -7,7 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Font Awesome para ícones "bonitinhos" -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" referrerpolicy="no-referrer" />
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">\
     <!-- Chart.js para gráficos -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -113,7 +113,6 @@
         }
 
         .timeline-bullet-date {
-            left: 1.25rem; /* Centraliza com a linha da timeline */
             position: absolute; /* Garantir que seja posicionado */
             left: 1px; /* Ajustado para alinhar com o centro da linha do tempo */
             top: 0; /* Alinha com o topo do bloco de data */
@@ -230,34 +229,48 @@
             flex-direction: column;
             height: 100%; /* Garante que o contêiner da etapa ocupe a altura total */
         }
+
+        /* Estilo para a bolinha do slider (thumb) */
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 24px; /* Tamanho da bolinha */
+            height: 24px; /* Tamanho da bolinha */
+            border-radius: 50%;
+            background: var(--color-green-positive); /* Cor verde */
+            cursor: grab;
+            box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.2); /* Sombra suave */
+            margin-top: -8px; /* Ajuste para centralizar verticalmente */
+        }
+
+        input[type="range"]::-moz-range-thumb {
+            width: 24px; /* Tamanho da bolinha */
+            height: 24px; /* Tamanho da bolinha */
+            border-radius: 50%;
+            background: var(--color-green-positive); /* Cor verde */
+            cursor: grab;
+            box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.2); /* Sombra suave */
+        }
+
+        input[type="range"]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 8px; /* Altura da barra */
+            background: #e2e8f0; /* Cor da trilha */
+            border-radius: 5px;
+        }
+
+        input[type="range"]::-moz-range-track {
+            width: 100%;
+            height: 8px; /* Altura da barra */
+            background: #e2e8f0; /* Cor da trilha */
+            border-radius: 5px;
+        }
     </style>
 </head>
 <body class="min-h-screen flex flex-col">
 
-    <!-- Tela de Login -->
-    <section id="login-screen" class="absolute inset-0 bg-gray-100 flex items-center justify-center p-4">
-        <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
-            <h2 class="text-3xl font-bold text-center text-gray-900 mb-6">Finanças Claras</h2>
-            <p class="text-center text-gray-600 mb-8">Faça login para acessar suas finanças.</p>
-            <form id="login-form" class="space-y-6">
-                <div>
-                    <label for="login-email" class="block text-sm font-medium text-gray-700">Email</label>
-                    <input type="email" id="login-email" class="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="seuemail@exemplo.com" required>
-                </div>
-                <div>
-                    <label for="login-password" class="block text-sm font-medium text-gray-700">Senha</label>
-                    <input type="password" id="login-password" class="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-blue-primary)]" placeholder="********" required>
-                </div>
-                <button type="submit" class="w-full py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-[var(--color-blue-primary)] hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-blue-primary)] transition duration-300">
-                    Entrar
-                </button>
-                <div id="login-error-message" class="text-red-500 text-sm text-center mt-4 hidden"></div>
-            </form>
-        </div>
-    </section>
-
     <!-- Conteúdo Principal da Aplicação -->
-    <div id="app-content" class="hidden flex-grow flex flex-col">
+    <div id="app-content" class="flex-grow flex flex-col">
         <!-- Cabeçalho Principal (Desktop) -->
         <header class="bg-white p-4 shadow-sm hidden md:block border-b border-gray-200">
             <div class="container mx-auto flex justify-between items-center">
@@ -410,6 +423,10 @@
                         <button id="refresh-chat-data-button" class="bg-gray-200 text-gray-600 p-3 rounded-full shadow-md hover:bg-gray-300 transition duration-300 mr-2">
                             <i class="fa-solid fa-arrows-rotate text-lg"></i> <!-- Ícone de Atualizar -->
                         </button>
+                        <!-- NOVO: Botão Limpar Chat -->
+                        <button id="clear-chat-button" class="bg-gray-200 text-gray-600 p-3 rounded-full shadow-md hover:bg-gray-300 transition duration-300 mr-2">
+                            <i class="fa-solid fa-trash-can text-lg"></i> <!-- Ícone de Limpar -->
+                        </button>
                         <input type="text" id="chat-input" placeholder="Assistente não configurado..."
                                class="flex-grow p-3 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]" disabled>
                         <button id="chat-send-button" class="px-6 py-3 bg-[var(--color-blue-primary)] text-white font-medium rounded-r-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-blue-primary)] transition duration-300" disabled>
@@ -504,51 +521,45 @@
                 </div>
                 <div id="budget-list-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     <!-- Orçamentos serão renderizados aqui pelo JavaScript -->
-                    <p class="text-center text-gray-500 py-4 col-span-full" id="no-budgets-message">Nenhum orçamento configurado ainda.</p>
+                    <p class="text-center text-gray-500 py-4 col-span-full" id="no-budgets-message">Nenhum orçamento configurado para este mês.</p>
                 </div>
             </section>
 
             <!-- Seção de Configuração da IA (NOVA ESTRUTURA) -->
             <section id="ai-config" class="page-section">
                 <h2 class="text-3xl font-bold mb-2 text-gray-900">Configurar Assistente IA</h2>
-                <p class="text-gray-600 text-lg mb-6">Ajuste a personalidade do seu assistente financeiro.</p>
+                <p class="text-gray-600 text-lg mb-6">Ajuste a persona e personalidade do seu assistente financeiro.</p>
                 <div class="bg-white p-6 rounded-lg shadow-md">
                     <div class="space-y-8">
-                        <!-- Campo Persona -->
+                        <!-- Campo Personagem -->
                         <div class="space-y-2">
                             <label for="ai-persona" class="block text-lg font-semibold text-gray-800">
                                 Personagem (Quem é a IA)
                             </label>
-                            <textarea id="ai-persona" rows="4" class="w-full p-3 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-[var(--color-blue-primary)] focus:border-[var(--color-blue-primary)]" placeholder="Descreva a personalidade da IA. Ex: Você é um coach financeiro durão..."></textarea>
+                            <textarea id="ai-persona" rows="4" class="w-full p-3 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-[var(--color-blue-primary)] focus:border-[var(--color-blue-primary)]" placeholder="Descreva o papel principal da IA. Ex: Você é um coach financeiro durão..."></textarea>
                             <p class="text-xs text-gray-500">
-                                Esta é a diretriz principal que define o comportamento da IA. Seja específico sobre o tom e a abordagem que você deseja.
+                                Esta é a diretriz principal que define o papel e o comportamento da IA.
                             </p>
                         </div>
-                        <!-- Slider de Simpatia -->
+                        <!-- Campo Personalidade (NOVO) -->
                         <div class="space-y-2">
-                            <div class="flex justify-between items-center">
-                                <label for="ai-sympathy-slider" class="text-lg font-semibold text-gray-800">Simpatia</label>
-                                <span id="ai-sympathy-label" class="text-sm font-medium text-gray-600">Equilibrada</span>
-                            </div>
-                            <input type="range" id="ai-sympathy-slider" min="0" max="100" value="50" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                            <label for="ai-personality" class="block text-lg font-semibold text-gray-800">
+                                Personalidade (Como a IA se comporta)
+                            </label>
+                            <textarea id="ai-personality" rows="4" class="w-full p-3 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-[var(--color-blue-primary)] focus:border-[var(--color-blue-primary)]" placeholder="Descreva o tone, o estilo de fala, o nível de formalidade e a profundidade das respostas. Ex: A IA é sempre encorajadora, usa linguagem simples e respostas concisas."></textarea>
                             <p class="text-xs text-gray-500">
-                                Em 0, a IA será rude. Em 100, será extremamente acolhedora e encorajadora.
+                                Descreva o tom, o estilo de fala e a profundidade das respostas da IA.
                             </p>
                         </div>
-                        <!-- Slider de Profundidade -->
-                        <div class="space-y-2">
-                            <div class="flex justify-between items-center">
-                                <label for="ai-depth-slider" class="text-lg font-semibold text-gray-800">Profundidade</label>
-                                <span id="ai-depth-label" class="text-sm font-medium text-gray-600">Nível Médio</span>
-                            </div>
-                            <input type="range" id="ai-depth-slider" min="0" max="100" value="50" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
-                            <p class="text-xs text-gray-500">
-                                Em 0, as respostas serão curtas. Em 100, serão extremamente detalhadas.
-                            </p>
-                        </div>                        
-                        <!-- Botão Salvar (agora sem a necessidade de um botão separado, o salvamento será automático) -->
+                        <!-- Mensagem de status de salvamento -->
                         <div id="ai-config-status-message" class="mt-4 text-sm font-medium text-green-600 hidden">
-                            Configurações salvas automaticamente!
+                            Configurações salvas!
+                        </div>
+                        <!-- NOVO: Botão Salvar Configurações -->
+                        <div class="flex justify-end mt-6">
+                            <button id="save-ai-config-button" class="px-6 py-3 bg-[var(--color-blue-primary)] text-white font-medium rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-blue-primary)] transition duration-300 shadow-md">
+                                Salvar Configurações
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -854,20 +865,13 @@
     <script type="module">
         // Importa os módulos necessários do Firebase
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signOut, onAuthStateChanged, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Variáveis globais do ambiente Canvas (preenchidas em tempo de execução)
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-        // ATENÇÃO: Firebase Config agora está hardcoded com as credenciais fornecidas pelo usuário.
-        const firebaseConfig = {
-            apiKey: "AIzaSyBEuFW_VQEx_smJUOxCsF0Jug_lnzUA2aw",
-            authDomain: "offline-d2e68.firebaseapp.com",
-            projectId: "offline-d2e68",
-            storageBucket: "offline-d2e68.firebasestorage.app",
-            messagingSenderId: "524684058670",
-            appId: "1:524684058670:web:5141130aee53e059cc7fbf"
-        };
+        // Firebase Config agora usa a variável global __firebase_config
+        const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
         const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
         // Instâncias do Firebase
@@ -884,9 +888,8 @@
 
         // Configurações da IA (ATUALIZADO)
         let aiConfig = {
-            persona: "Você é um educador financeiro especialista...", // Mantenha o seu texto padrão
-            sympathy: 50, // Valor de 0 a 100
-            depth: 50     // Valor de 0 a 100
+            persona: "Você é um educador financeiro especialista...", 
+            personality: "Sua personalidade é equilibrada e você responde de forma clara e objetiva." // Novo campo
         };
 
         // Múltiplas chaves de API Gemini (ARRAY)
@@ -949,16 +952,17 @@
             return `${year}-${month}`;
         }
 
+        // NOVO: Função para escapar crases e sequências de interpolação de template em strings
+        function escapeTemplateLiterals(str) {
+            // Ensure str is a string. If it's null, undefined, or a number, convert it.
+            if (typeof str !== 'string') {
+                str = String(str);
+            }
+            return str.replace(/`/g, '\\`').replace(/\$\{/g, '\\${');
+        }
+
         // JavaScript para simular a navegação entre as seções/páginas
         document.addEventListener('DOMContentLoaded', async () => {
-            // Elementos da Tela de Login
-            const loginScreen = document.getElementById('login-screen');
-            const loginForm = document.getElementById('login-form');
-            const loginEmailInput = document.getElementById('login-email');
-            const loginPasswordInput = document.getElementById('login-password');
-            const loginErrorMessage = document.getElementById('login-error-message');
-            const appContent = document.getElementById('app-content');
-
             // Elementos do Modal de Confirmação Genérico
             const confirmationModal = document.getElementById('confirmation-modal');
             const confirmationModalTitle = document.getElementById('confirmation-modal-title');
@@ -1025,6 +1029,7 @@
             const sendButton = document.getElementById('chat-send-button'); 
             const chatLoadingIndicator = document.getElementById('chat-loading-indicator');
             const refreshChatDataButton = document.getElementById('refresh-chat-data-button');
+            const clearChatButton = document.getElementById('clear-chat-button'); // NOVO: Botão Limpar Chat
 
             // Elementos das Categorias
             const addCategoryButton = document.getElementById('add-new-category-button');
@@ -1038,7 +1043,7 @@
             const categoryModalTitle = document.getElementById('category-modal-title');
             const categoryTypeRadios = document.querySelectorAll('input[name="category-type"]'); 
             const priorityField = document.getElementById('priority-field'); 
-            const categoryPriorityRadios = document.querySelectorAll('input[name="category-priority"]'); 
+            const categoryPriorityRadios = document.querySelectorAll('input[name="category-priority']"); 
             const categorySearchInput = document.getElementById('category-search-input');
             const categorySaveStatusMessage = document.getElementById('category-save-status-message');
             // NOVO: Elementos para o campo de Valor Alvo da Categoria/Caixinha
@@ -1109,7 +1114,7 @@
             const budgetOptimizationText = document.getElementById('budget-optimization-text');
 
 
-            // Elementos do Modal de Chave de API (ATUALIZADO PARA MÚLTIPLAS CHAVES)
+            // Elementos do Modal de Chave de API (ATUALIZADO PARA 5 CAMPOS)
             const apiManagementLink = document.querySelector('[data-page="api-management"]');
             const apiKeysModal = document.getElementById('api-keys-modal');
             const closeApiKeysModalButton = document.getElementById('close-api-keys-modal');
@@ -1126,11 +1131,9 @@
 
             // Elementos da Configuração de IA (ATUALIZADOS)
             const aiPersonaInput = document.getElementById('ai-persona');
-            const aiSympathySlider = document.getElementById('ai-sympathy-slider');
-            const aiSympathyLabel = document.getElementById('ai-sympathy-label');
-            const aiDepthSlider = document.getElementById('ai-depth-slider');
-            const aiDepthLabel = document.getElementById('ai-depth-label');
+            const aiPersonalityInput = document.getElementById('ai-personality'); // NOVO ELEMENTO
             const aiConfigStatusMessage = document.getElementById('ai-config-status-message');
+            const saveAiConfigButton = document.getElementById('save-ai-config-button'); // NOVO: Botão Salvar Configurações
 
             // Elementos do novo Modal de Orçamento
             const budgetModal = document.getElementById('budget-modal');
@@ -1162,14 +1165,12 @@
                     }
                     // Popula os campos da UI com os valores carregados ou padrão
                     aiPersonaInput.value = aiConfig.persona;
-                    aiSympathySlider.value = aiConfig.sympathy;
-                    aiSympathyLabel.textContent = getSympathyLabel(aiConfig.sympathy);
-                    aiDepthSlider.value = aiConfig.depth;
-                    aiDepthLabel.textContent = getDepthLabel(aiConfig.depth);
+                    aiPersonalityInput.value = aiConfig.personality; // Popula o novo campo
                     
                     if (!docSnap.exists()) {
                         console.log("AI Config não encontrada, salvando padrão.");
-                        saveAiConfig(); // Salva a configuração padrão se não existir
+                        // Não salva automaticamente aqui, apenas inicializa a variável global
+                        // O salvamento inicial será feito pelo clique no botão Salvar
                     }
                 }, (error) => {
                     console.error("Erro ao carregar AI Config do Firestore:", error);
@@ -1283,6 +1284,13 @@
                 }
             }
 
+            // NOVO: Função para salvar manualmente as configurações da IA
+            async function manualSaveAiConfig() {
+                aiConfig.persona = aiPersonaInput.value;
+                aiConfig.personality = aiPersonalityInput.value;
+                await saveAiConfig();
+            }
+
             // Salva categorias no Firestore (como um único documento com array)
             // Agora lida com categorias normais e caixinhas
             async function saveCategories() {
@@ -1375,7 +1383,15 @@
             }
             // --- FIM das Funções de Persistência (Firebase Firestore) ---
 
-            await initializeFirebase();
+            // Adiciona um try-catch para a inicialização do Firebase
+            try {
+                await initializeFirebase();
+            } catch (error) {
+                console.error("Erro fatal na inicialização do Firebase:", error);
+                document.body.innerHTML = '<div class="flex items-center justify-center min-h-screen bg-red-100 text-red-800 p-4 rounded-lg shadow-md">' +
+                                          '<p class="text-lg font-semibold">Erro crítico: Não foi possível carregar o aplicativo. Por favor, tente novamente mais tarde ou contate o suporte.</p>' +
+                                          '</div>';
+            }
             
             // A função loadApiKey agora é disparada pelo onSnapshot dentro de loadAllDataFromFirestore
             // e não precisa mais ser chamada explicitamente aqui ou em openApiKeysModal.
@@ -1416,12 +1432,9 @@
                 } else if (pageId === 'budget-management') {
                     renderBudgets();
                 } else if (pageId === 'ai-config') {
-                    // Os valores já são populados pelo onSnapshot, mas garantimos que os labels estão corretos.
+                    // Os valores já são populados pelo onSnapshot, mas garantimos que os campos estão corretos.
                     aiPersonaInput.value = aiConfig.persona;
-                    aiSympathySlider.value = aiConfig.sympathy;
-                    aiSympathyLabel.textContent = getSympathyLabel(aiConfig.sympathy);
-                    aiDepthSlider.value = aiConfig.depth;
-                    aiDepthLabel.textContent = getDepthLabel(aiConfig.depth);
+                    aiPersonalityInput.value = aiConfig.personality; // Popula o novo campo
                 }
             }
 
@@ -1553,7 +1566,7 @@
                         <div class="flex items-center">
                             <div class="w-6 h-6 rounded-full mr-3" style="background-color: ${category.color};"></div>
                             <div>
-                                <p class="font-medium text-lg">${category.name}</p>
+                                <p class="font-medium text-lg">${escapeTemplateLiterals(category.name)}</p>
                                 <p class="text-sm text-gray-500">${typeDisplay}${priorityDisplay}${savedAmountDisplay}</p>
                                 ${progressHtml}
                             </div>
@@ -1705,7 +1718,7 @@
                 await saveCategories();
                 
                 if(transactionModal.classList.contains('active')) {
-                    // populateTransactionCategories(document.querySelector('input[name="transaction-type"]:checked').value); // Removido, a lógica de populate é no goToStep(2)
+                    // populateTransactionCategories(document.querySelector('input[name="transaction-type']:checked').value); // Removido, a lógica de populate é no goToStep(2)
                 }
                 closeCategoryModal(); // Fecha o modal após salvar
             });
@@ -1724,7 +1737,7 @@
 
                     showConfirmationModal(
                         "Confirmar Exclusão",
-                        `Tem certeza que deseja excluir a categoria "${categoryToDelete.name}"? Todas as transações associadas a ela ficarão sem categoria.`,
+                        `Tem certeza que deseja excluir a categoria "${escapeTemplateLiterals(categoryToDelete.name)}"? Todas as transações associadas a ela ficarão sem categoria.`,
                         async () => {
                             categories = categories.filter(cat => cat.id !== id);
                             const transactionsToUpdate = transactions.filter(t => t.categoryId === id);
@@ -1736,7 +1749,7 @@
                             }
                             await saveCategories();
                             // if(transactionModal.classList.contains('active')) { // Removido, a lógica de populate é no goToStep(2)
-                            //     populateTransactionCategories(document.querySelector('input[name="transaction-type"]:checked').value);
+                            //     populateTransactionCategories(document.querySelector('input[name="transaction-type']:checked').value);
                             // }
                             updateDashboardAndTransactionSummaries();
                         }
@@ -1772,7 +1785,7 @@
                 transactionCategorySelect.innerHTML = '<option value="">Selecione uma Categoria</option>';
 
                 let filteredCategories = [];
-                // A lógica aqui precisa ser mais inteligente para o novo fluxo:
+                // A lógica aqui precisa ser inteligente para o novo fluxo:
                 // Se for 'income' ou 'expense', filtra por essas categorias.
                 // Se for 'deposit' ou 'withdraw', filtra por categorias do tipo 'caixinha'.
                 if (selectedTransactionType === 'expense' || selectedTransactionType === 'income') {
@@ -1895,9 +1908,9 @@
                         transactionItem.innerHTML = `
                             <div class="${bulletClass}" style="${bulletStyle}"></div>
                             <div class="flex-grow min-w-0">
-                                <p class="font-medium truncate text-gray-800">${categoryName}</p>
+                                <p class="font-medium truncate text-gray-800">${escapeTemplateLiterals(categoryName)}</p>
                                 ${statusIndicatorHtml} <!-- Status em nova linha -->
-                                <p class="text-sm text-gray-500 truncate">${transaction.description}</p>
+                                <p class="text-sm text-gray-500 truncate">${escapeTemplateLiterals(transaction.description)}</p>
                             </div>
                             <div class="flex items-center space-x-2 ml-4">
                                 <p class="font-bold text-lg ${amountColorClass}">${amountPrefix} ${formatCurrency(transaction.amount)}</p>
@@ -2261,7 +2274,7 @@
                         <div>
                             <div class="flex items-center mb-2">
                                 <div class="w-4 h-4 rounded-full mr-2" style="background-color: ${category.color};"></div>
-                                <p class="font-semibold text-lg">${category.name}</p>
+                                <p class="font-semibold text-lg">${escapeTemplateLiterals(category.name)}</p>
                             </div>
                             <div class="w-full bg-gray-200 rounded-full h-2.5 my-2">
                                 <div class="${progressBarColor} h-2.5 rounded-full" style="width: ${Math.min(100, progress)}%;"></div>
@@ -2302,7 +2315,7 @@
                     budgetDataString += "<strong>Orçamentos configurados:</strong><br><br>";
                     budgets.forEach(budget => {
                         const category = categories.find(c => c.id === budget.categoryId);
-                        const categoryName = category ? category.name : 'Categoria Desconhecida';
+                        const categoryName = category ? escapeTemplateLiterals(category.name) : 'Categoria Desconhecida';
                         const actualSpent = transactions.filter(t => 
                             t.categoryId === budget.categoryId && t.type === 'expense' && (t.status === 'Pago' || t.status === 'Recebido' || t.status === 'Confirmado')
                         ).reduce((sum, t) => sum + parseFloat(t.amount), 0);
@@ -2319,7 +2332,7 @@
                     `Seja direto, prático e objetivo, como um consultor financeiro que não hesita em apontar onde o usuário pode melhorar. ` +
                     `Use títulos em negrito (<strong>), listas não ordenadas (<ul>, <li>) e quebras de linha (<br>). ` +
                     `NUNCA use Markdown (*, **, _, #, etc.). ` +
-                    `Aqui estão os dados: <br><br>${budgetDataString}`;
+                    `Aqui estão os dados: <br><br>${budgetDataString}`; // CORRIGIDO: Usando budgetDataString
 
                 try {
                     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${activeApiKey}`;
@@ -2327,7 +2340,7 @@
                     const payload = {
                         contents: [{ role: "user", parts: [{ text: optimizationPrompt }] }],
                         generationConfig: {
-                            temperature: 0.7,
+                            temperature: 0.5, // Temperatura fixa para otimização
                             topK: 40,
                             topP: 0.95,
                             maxOutputTokens: 800
@@ -2396,33 +2409,49 @@
                 chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
             }
 
+            // NOVO: Função para limpar o chat
+            function clearChat() {
+                chatMessagesDiv.innerHTML = '';
+                chatHistory = [];
+                hasConsultedFinancialData = false;
+                appendMessage('ai', 'Chat limpo. Como posso ajudar agora?');
+            }
+
             // Função para obter dados financeiros formatados para a IA
             function getFinancialDataForAI() {
-                let dataString = "";
+                let dataString = "--- INÍCIO DOS DADOS FINANCEIROS PARA ANÁLISE ---\n\n";
 
-                // Adicionar Categorias e Caixinhas
-                dataString += "<strong>Categorias e Caixinhas Cadastradas:</strong><br><br>";
-                if (categories.length > 0) {
-                    categories.forEach(cat => {
-                        let categoryDetails = `- ${cat.name} (Tipo: ${cat.type})`;
-                        if (cat.type === 'expense' && cat.priority) {
-                            categoryDetails += `, Prioridade: ${cat.priority === 'essential' ? 'Essencial' : 'Não Essencial'}`;
-                        } else if (cat.type === 'caixinha') {
-                            categoryDetails += `, Guardado: ${formatCurrency(cat.savedAmount || 0)}, Alvo: ${formatCurrency(cat.targetAmount || 0)}`;
-                        }
-                        dataString += `${categoryDetails}<br>`; 
+                // 1. Resumo de Categorias e Despesas
+                const totalEssencial = transactions.filter(t => t.type === 'expense' && categories.find(c => c.id === t.categoryId)?.priority === 'essential').reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
+                const totalNaoEssencial = transactions.filter(t => t.type === 'expense' && categories.find(c => c.id === t.categoryId)?.priority === 'non-essential').reduce((sum, t) => sum + parseFloat(t.amount || 0), 0);
+                dataString += `<strong>Resumo de Despesas por Prioridade:</strong><br>- Essenciais: ${formatCurrency(totalEssencial)}<br>- Não Essenciais: ${formatCurrency(totalNaoEssencial)}<br><br>`;
+
+                // 2. Detalhes das Caixinhas (Metas)
+                const caixinhas = categories.filter(c => c.type === 'caixinha');
+                dataString += "<strong>Progresso das Caixinhas (Metas de Poupança):</strong><br>";
+                if (caixinhas.length > 0) {
+                    caixinhas.forEach(c => {
+                        const percent = (c.targetAmount > 0) ? ((c.savedAmount / c.targetAmount) * 100).toFixed(0) : 0;
+                        dataString += `- ${escapeTemplateLiterals(c.name)}: Guardado ${formatCurrency(c.savedAmount)} de ${formatCurrency(c.targetAmount)} (${percent}%)<br>`;
                     });
                 } else {
-                    dataString += "Nenhuma categoria ou caixinha cadastrada.<br>";
+                    dataString += "- Nenhuma caixinha cadastrada.<br>";
                 }
                 dataString += "<br>";
 
-                // Adicionar Orçamentos
-                dataString += "<strong>Orçamentos por Categoria:</strong><br><br>";
+                // 3. Status das Transações
+                const despesasPagas = transactions.filter(t => t.type === 'expense' && t.status === 'Pago').length;
+                const despesasPendentes = transactions.filter(t => t.type === 'expense' && t.status === 'Pendente').length;
+                const receitasRecebidas = transactions.filter(t => t.type === 'income' && t.status === 'Recebido').length;
+                const receitasPendentes = transactions.filter(t => t.type === 'income' && t.status === 'Pendente').length;
+                dataString += `<strong>Status das Transações:</strong><br>- Despesas Pagas: ${despesasPagas}<br>- Despesas Pendentes: ${despesasPendentes}<br>- Receitas Recebidas: ${receitasRecebidas}<br>- Receitas Pendentes: ${receitasPendentes}<br><br>`;
+
+                // 4. Orçamentos
+                dataString += "<strong>Orçamentos por Categoria:</strong><br>";
                 if (budgets.length > 0) {
                     budgets.forEach(budget => {
                         const category = categories.find(c => c.id === budget.categoryId);
-                        const categoryName = category ? category.name : 'Categoria Desconhecida';
+                        const categoryName = category ? escapeTemplateLiterals(category.name) : 'Categoria Desconhecida'; // Escape aqui
                         const actualSpent = transactions.filter(t => 
                             t.categoryId === budget.categoryId && t.type === 'expense' && (t.status === 'Pago' || t.status === 'Recebido' || t.status === 'Confirmado')
                         ).reduce((sum, t) => sum + parseFloat(t.amount), 0);
@@ -2430,27 +2459,25 @@
                         dataString += `- ${categoryName}: Orçado ${formatCurrency(budget.amount)}, Gasto ${formatCurrency(actualSpent)}, Restante ${formatCurrency(remaining)}<br>`;
                     });
                 } else {
-                    dataString += "Nenhum orçamento configurado.<br>";
+                    dataString += "- Nenhum orçamento configurado.<br>";
                 }
                 dataString += "<br>";
 
-                // Adicionar Transações Recentes (ex: últimas 10 ou do mês atual)
-                dataString += "<strong>Últimas Transações (Recentes):</strong><br><br>";
+                // 5. Transações Recentes (últimas 10)
+                dataString += "<strong>Últimas Transações (Recentes):</strong><br>";
                 if (transactions.length > 0) {
-                    // Ordenar por data mais recente
                     const sortedTransactions = [...transactions].sort((a, b) => new Date(b.date) - new Date(a.date));
-                    const recentTransactions = sortedTransactions.slice(0, 10); // Pegar as últimas 10
-
+                    const recentTransactions = sortedTransactions.slice(0, 10);
                     recentTransactions.forEach(t => {
                         let categoryDisplay = '';
                         let transactionTypeDetail = '';
 
                         const category = categories.find(cat => cat.id === t.categoryId);
                         if (category && category.type === 'caixinha') { 
-                            categoryDisplay = `(Caixinha: ${category.name})`; 
+                            categoryDisplay = `(Caixinha: ${escapeTemplateLiterals(category.name)})`; // Escape aqui
                             transactionTypeDetail = t.transactionType === 'deposit' ? 'Depósito' : 'Resgate';
                         } else if (category) {
-                            categoryDisplay = `(Categoria: ${category.name})`;
+                            categoryDisplay = `(Categoria: ${escapeTemplateLiterals(category.name)})`; // Escape aqui
                             transactionTypeDetail = t.type === 'income' ? 'Receita' : 'Despesa';
                         } else {
                             categoryDisplay = `(Categoria: Desconhecida)`;
@@ -2458,30 +2485,13 @@
                         }
                         
                         const amountPrefix = (t.type === 'income' || (t.type === 'caixinha' && t.transactionType === 'withdraw')) ? '+' : '-';
-                        dataString += `- ${new Date(t.date + 'T12:00:00').toLocaleDateString('pt-BR')}: ${t.description}, ${amountPrefix} ${formatCurrency(t.amount)} ${categoryDisplay} [Tipo: ${transactionTypeDetail}, Status: ${t.status}]<br>`;
+                        dataString += `- ${new Date(t.date + 'T12:00:00').toLocaleDateString('pt-BR')}: ${escapeTemplateLiterals(t.description)}, ${amountPrefix} ${formatCurrency(t.amount)} ${categoryDisplay} [Tipo: ${transactionTypeDetail}, Status: ${t.status}]<br>`; // Escape aqui
                     });
                 } else {
-                    dataString += "Nenhuma transação registrada.<br>";
+                    dataString += "- Nenhuma transação registrada.<br>";
                 }
-                dataString += "<br>--- Fim dos Dados Financeiros ---<br><br>";
+                dataString += "\n--- FIM DOS DADOS FINANCEIROS PARA ANÁLISE ---\n\n";
                 return dataString;
-            }
-
-            // Funções para os rótulos dos sliders (NOVO)
-            function getSympathyLabel(value) {
-                if (value < 20) return "Rude e Direta";
-                if (value < 40) return "Sincera";
-                if (value < 60) return "Equilibrada";
-                if (value < 80) return "Amigável";
-                return "Acolhedora";
-            }
-
-            function getDepthLabel(value) {
-                if (value < 20) return "Respostas Curtas";
-                if (value < 40) return "Objetiva";
-                if (value < 60) return "Nível Médio";
-                if (value < 80) return "Detalhada";
-                return "Muito Detalhada";
             }
 
             // Função para obter a chave de API Gemini ativa
@@ -2515,60 +2525,77 @@
                 chatInput.value = '';
                 chatLoadingIndicator.classList.remove('hidden');
 
-                // Construir a instrução do sistema com base nas configurações da IA
-                let currentPersona = aiConfig.persona;
-                let currentSympathy = getSympathyLabel(aiConfig.sympathy);
-                let currentDepth = getDepthLabel(aiConfig.depth);
+                let persona = aiConfig.persona.trim();
+                let personality = aiConfig.personality.trim();
 
-                const baseSystemInstruction =
-                    `Você é meu assistente financeiro pessoal, especializado em organização de gastos, planejamento financeiro e educação financeira. Acompanho seus dados em tempo real e uso regras como a 50-30-20 para te ajudar a tomar decisões mais inteligentes com o seu dinheiro. Meu papel é analisar suas entradas e saídas, identificar padrões, te avisar quando você sair do ideal e propor ajustes práticos. Se tiver dinheiro sobrando, mostro como usar com inteligência. Se faltar, te mostro onde cortar. Se você não tiver registrado seus gastos do dia ou não tiver dados o suficiente, vou te lembrar de atualizar. Sem informação, não consigo te orientar. Meu objetivo é ser o cérebro da sua vida financeira — mas preciso que você alimente ele.` +
-                    `\n\nSua personalidade: ${currentPersona}. Seu tom de simpatia: ${currentSympathy}. Sua profundidade de resposta: ${currentDepth}. ` +
-                    `Quando tiver que dar uma notícia ruim ou um feedback direto, não floreie, vá direto ao ponto. Após entregar a realidade, seja construtivo e ofereça sugestões claras para melhorar. Se o usuário não tiver dados suficientes para uma análise aprofundada, informe de forma clara que mais dados são necessários. Sua função é educar e otimizar, não suavizar a realidade financeira. Use emojis com moderação e apenas para dar um leve toque de leveza após uma informação séria ou para realçar um ponto positivo/ação recomendada.` +
-                    `\n\nPadrões de Resposta e Interação:` +
-                    `\n- <strong>Sem Markdown</strong>: NUNCA use *, **, _, #, ou qualquer outro caractere Markdown. Use HTML básico para formatação: <strong> para negrito, <br> para quebra de linha, <ul> para listas não ordenadas, e <li> para itens de lista. Para listas, use traços simples como marcadores: "- Item 1".<br>` +
-                    `\n- <strong>Respostas enxutas e úteis</strong>: Não jogue informações em excesso. Sempre responda apenas o necessário, com clareza e objetividade.<br>` +
-                    `\n- <strong>Mostre apenas o necessário</strong>: Se for relevante para a pergunta, mostre apenas o essencial para ajudar na tomada de decisão. Por exemplo: "Você gastou R$ 300 com Ifood este mês. Isso é 30% do seu salário de R$ 1.000."<br>` +
-                    `\n- <strong>Nunca mostre dados técnicos sem necessidade</strong>: Não exiba códigos de cor, tipos de ID, ou estruturas internas de dados (como isCaixinhaTransaction, categoryId, caixinhaId), a não ser que o usuário peça diretamente por detalhes técnicos.<br>` +
-                    `\n- <strong>Tome iniciativa útil</strong>: Se o usuário disser algo como "Entendi", "Beleza", "Ok", ou similares, continue a conversa com sugestões diretas e pertinentes ao contexto anterior. Não reinicie a conversa de forma genérica.<br>` +
-                    `\n\n<strong>Ambiente Técnico</strong>: Este assistente roda em um arquivo HTML local e agora utiliza o Firebase Firestore para armazenar dados. A IA deve estar totalmente configurada no código-fonte e através dos dados carregados do Firestore.<br>` +
-                    `\n\n<strong>Objetivo Final</strong>: Seja o cérebro financeiro pessoal do usuário, com total clareza, iniciativa e foco. Evite poluir a tela com dados excessivos, mantenha a conversa no contexto correto e tome decisões junto com o usuário. Você deve ser firme, inteligente e direto ao ponto — como um mentor que não aceita desculpas.`;
+                // NOVO: Validação dos campos Personagem e Personalidade
+                if (!persona && !personality) {
+                    appendMessage('ai', 'Ambos os campos "Personagem (Quem é a IA)" e "Personalidade (Como a IA se comporta)" estão vazios. Por favor, preencha-os nas configurações da IA para que eu possa interagir.', 'error');
+                    isSendingMessage = false;
+                    chatLoadingIndicator.classList.add('hidden');
+                    return;
+                } else if (!persona) {
+                    appendMessage('ai', 'O campo "Personagem (Quem é a IA)" está vazio. Por favor, preencha-o nas configurações da IA para que eu possa interagir.', 'error');
+                    isSendingMessage = false;
+                    chatLoadingIndicator.classList.add('hidden');
+                    return;
+                } else if (!personality) {
+                    appendMessage('ai', 'O campo "Personalidade (Como a IA se comporta)" está vazio. Por favor, preencha-o nas configurações da IA para que eu possa interagir.', 'error');
+                    isSendingMessage = false;
+                    chatLoadingIndicator.classList.add('hidden');
+                    return;
+                    }
+
+                // Escapar crases e sequências de interpolação de template dos valores de persona e personality
+                const escapedPersona = escapeTemplateLiterals(persona);
+                const escapedPersonality = escapeTemplateLiterals(personality);
+                const escapedUserMessage = escapeTemplateLiterals(userMessage); // CORRIGIDO: Escapar a mensagem do usuário
+
+                // Construção do prompt principal
+                const baseSystemInstruction = `
+                    <strong>MISSÃO CRÍTICA E IDENTIDADE (PRIORIDADE MÁXIMA):</strong><br>
+                    Sua língua de comunicação é o Português do Brasil. Sempre responda em Português do Brasil.<br>
+                    Seu papel principal é definido por esta persona:<br><persona>${escapedPersona}</persona><br><br>
+                    <strong>COMPORTAMENTO E ESTILO (OBRIGATÓRIO):</strong><br>Seu comportamento, tom de voz e estilo de resposta devem seguir ESTRITAMENTE as seguintes regras de personalidade:<br><personalidade>${escapedPersonality}</personalidade><br><br>
+                    É ABSOLUTAMENTE ESSENCIAL que você NUNCA quebre o personagem e a personalidade definidos acima. Sua função principal é ajudar o usuário com base nesses parâmetros, usando os dados financeiros fornecidos a seguir como contexto para suas análises.<br><br>
+                    <strong>REGRAS DE FORMATAÇÃO E INTERAÇÃO:</strong><br>
+                    - <strong>ATENÇÃO CRÍTICA À FORMATAÇÃO:</strong> Use <strong>APENAS HTML</strong> para formatação. Isso significa que você deve usar tags HTML como <strong> para negrito, <ul> e <li> para listas, e <br> para quebras de linha. <strong>NUNCA, EM HIPÓTESE ALGUMA, use Markdown</strong> (como *, **, _, #, etc.). Se você usar Markdown, ele aparecerá como texto cru para o usuário. <strong>Exemplo de lista formatada corretamente:</strong><br><ul><li>Item 1</li><li>Item 2 com <strong>texto em negrito</strong></li></ul><br>
+                    - Seja proativo. Use os dados para fazer sugestões, não apenas para responder perguntas.<br>
+                    - Mantenha a conversa fluida, lembrando do histórico.<br>
+                    - <strong>NÃO</strong> liste os dados brutos para o usuário. Ele já os vê no app. Use-os para gerar insights e conselhos acionáveis. Filtre e resuma as informações com base na mensagem do usuário e no contexto da conversa.<br>
+                    - <strong>Seu "mundo" é este aplicativo HTML:</strong> Você tem acesso aos dados financeiros fornecidos e às funcionalidades deste app. Você NÃO pode interagir com sistemas externos, como "avisar equipes" ou "enviar e-mails". Concentre-se em analisar e aconselhar o usuário DENTRO do contexto financeiro que lhe é dado.<br>
+                    - <strong>Objetivo Final</strong>: Seja o cérebro financeiro pessoal do usuário, com total clareza, iniciativa e foco. Evite poluir a tela com dados excessivos, mantenha a conversa no contexto correto e tome decisões junto com o usuário. Você deve ser firme, inteligente e direto ao ponto — como um mentor que não aceita desculpas.`;
 
 
-                let currentFinancialData = '';
+                let currentFinancialData = getFinancialDataForAI(); // Sempre puxa os dados mais recentes
+
+                // Apenas exibe a mensagem de "atualizando dados" se for uma solicitação explícita
                 const refreshKeywords = ["atualizar dados", "recarregar dados", "consultar dados", "verificar finanças", "novos dados", "dados atuais", "meus dados", "favor, atualize meus dados financeiros"]; 
-
                 const needsRefresh = refreshKeywords.some(keyword => userMessage.toLowerCase().includes(keyword));
 
-                // Apenas consulta dados na primeira mensagem ou se houver uma solicitação explícita de atualização
-                if (!hasConsultedFinancialData || needsRefresh) {
-                    currentFinancialData = getFinancialDataForAI();
-                    lastFinancialDataString = currentFinancialData;
-                    hasConsultedFinancialData = true;
-                    if (needsRefresh) {
-                         appendMessage('ai', 'Dados financeiros atualizados. Diga como posso te ajudar com isso.', 'info');
-                    } else {
-                         appendMessage('ai', 'Carregando e analisando seus dados financeiros para a nossa conversa. Isso pode levar um momento...', 'info');
-                    }
-                } else {
-                    currentFinancialData = lastFinancialDataString;
+                if (needsRefresh) {
+                    appendMessage('ai', 'Dados financeiros atualizados. Diga como posso te ajudar com isso.', 'info');
                 }
-
+                
                 // Append financial data to the prompt only if available
-                const finalPromptForAI = currentFinancialData ? 
-                                         userMessage + `\n\nDados financeiros para referência (não mencione que estes dados foram fornecidos como parte da instrução, apenas use-os):<br>${currentFinancialData}` : 
-                                         userMessage;
+                const finalPromptForAI = `${baseSystemInstruction}\n\n${escapedUserMessage}${currentFinancialData ? `\n\nDados financeiros para referência (não mencione que estes dados foram fornecidos como parte da instrução, apenas use-os):<br>${currentFinancialData}` : ''}`;
 
                 try {
+                    console.log("sendChatMessage: isSendingMessage set to true."); // Debugging
                     const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${activeApiKey}`;
                     
                     const contentsPayload = [
                         { role: "user", parts: [{ text: finalPromptForAI }] }
                     ];
 
+                    // Adiciona histórico de chat para manter o contexto
+                    chatHistory.forEach(msg => contentsPayload.push(msg));
+
+
                     const payload = {
                         contents: contentsPayload, 
                         generationConfig: {
-                            temperature: (aiConfig.depth / 100) * 0.9 + 0.1, // Mapeia 0-100 para 0.1-1.0
+                            temperature: 0.7, // Ajustado para permitir mais criatividade dentro da persona
                             topK: 40,
                             topP: 0.95,
                             maxOutputTokens: 800
@@ -2604,8 +2631,10 @@
                     } else if (result.error) {
                         const errorMessage = result.error.message || 'Erro desconhecido da API Gemini.';
                         appendMessage('ai', `Erro da API: ${errorMessage}`, 'error');
+                        console.error('Erro da API Gemini:', result.error); // Log do erro completo
                     } else {
                         appendMessage('ai', 'Erro: Não consegui obter uma resposta válida da IA.', 'error');
+                        console.error('Resposta inesperada da API Gemini:', result); // Log da resposta inesperada
                     }
                 } catch (error) {
                     console.error('Erro ao chamar a API Gemini:', error);
@@ -2614,6 +2643,7 @@
                     chatLoadingIndicator.classList.add('hidden');
                     chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
                     isSendingMessage = false; 
+                    console.log("sendChatMessage: isSendingMessage set to false."); // Debugging
                 }
             }
 
@@ -2723,11 +2753,6 @@
                 }, 5000);
             }
 
-            // REMOVIDO: Event listener para salvar as configurações da IA (agora é automático)
-            // if (saveAiConfigButton) {
-            //     saveAiConfigButton.addEventListener('click', saveAiConfig);
-            // }
-
             // --- Configuração e Inicialização do Firebase ---
             async function initializeFirebase() {
                 try {
@@ -2741,23 +2766,44 @@
                     onAuthStateChanged(auth, async (user) => {
                         if (user) {
                             userId = user.uid;
-                            isAuthReady = true;
-                            loginScreen.classList.add('hidden');
-                            appContent.classList.remove('hidden');
                             console.log("Usuário autenticado:", userId);
-                            setTimeout(async () => {
-                                await loadAllDataFromFirestore();
-                                showPage('dashboard');
-                            }, 100);
                         } else {
-                            userId = null;
-                            isAuthReady = false;
-                            loginScreen.classList.remove('hidden');
-                            appContent.classList.add('hidden');
-                            console.log("Usuário não autenticado. Mostrando tela de login.");
+                            // Se nenhum usuário estiver logado (ex: primeira carga sem token, ou logout),
+                            // garante que um userId esteja disponível para operações do Firestore.
+                            // Isso permitirá a persistência anônima.
+                            if (!userId) { // Apenas gera se não estiver já definido por uma sessão anônima anterior
+                                userId = crypto.randomUUID();
+                                console.log("Usuário não autenticado. Usando ID temporário para persistência:", userId);
+                            }
+                            // Tenta o login anônimo se ainda não estiver logado.
+                            // Isso é importante para regras do Firestore que exigem `request.auth != null`.
+                            if (!auth.currentUser) {
+                                try {
+                                    await signInAnonymously(auth);
+                                    // Se o login anônimo for bem-sucedido, atualiza o userId para o UID anônimo real
+                                    if (auth.currentUser) {
+                                        userId = auth.currentUser.uid;
+                                        console.log("Login anónimo bem-sucedido. UID:", userId);
+                                    }
+                                } catch (anonError) {
+                                    console.error("Falha no login anónimo. Verifique se a autenticação anónima está ativada no Firebase:", anonError);
+                                    // Mesmo que o login anônimo falhe, continuamos com o UUID gerado,
+                                    // mas as operações do Firestore podem falhar se as regras exigirem autenticação.
+                                }
+                            }
                         }
+                        isAuthReady = true; // O estado de autenticação foi determinado (usuário ou ID temporário/anônimo)
+                        // A tela de login não existe mais, então sempre mostra o conteúdo da aplicação
+                        document.getElementById('app-content').classList.remove('hidden'); 
+                        
+                        // Carrega os dados somente depois que o estado de autenticação estiver totalmente determinado e o userId definido
+                        setTimeout(async () => {
+                            await loadAllDataFromFirestore();
+                            showPage('dashboard');
+                        }, 100);
                     });
 
+                    // Tenta fazer login com o token personalizado se fornecido
                     if (initialAuthToken) {
                         try {
                             await signInWithCustomToken(auth, initialAuthToken);
@@ -2765,62 +2811,21 @@
                         } catch (error) {
                             if (error.code === 'auth/custom-token-mismatch') {
                                 console.error("Erro de autenticação com o token inicial: O token fornecido é inválido. Por favor, verifique as configurações do Firebase ou gere um novo token.", error);
-                                loginErrorMessage.textContent = `Erro de autenticação: O token fornecido é inválido. Por favor, verifique as configurações do Firebase ou gere um novo token.`;
-                                loginErrorMessage.classList.remove('hidden');
                             } else {
                                 console.error("Falha na autenticação com o token inicial. Por favor, verifique as configurações do Firebase e o token.", error);
-                                loginErrorMessage.textContent = `Erro de autenticação: ${error.message}. Por favor, contacte o suporte ou verifique as configurações do Firebase.`;
-                                loginErrorMessage.classList.remove('hidden');
                             }
                         }
                     } else {
-                        // If no initialAuthToken is provided, then attempt anonymous sign-in.
-                        try {
-                            await signInAnonymously(auth);
-                            console.log("Nenhum token inicial fornecido. Login anónimo bem-sucedido.");
-                        } catch (error) {
-                            console.error("Falha no login anónimo. Por favor, verifique se a autenticação anónima está ativada no Firebase.", error);
-                            loginErrorMessage.textContent = `Erro de autenticação anónima: ${error.message}. Por favor, contacte o suporte ou verifique as configurações do Firebase.`;
-                            loginErrorMessage.classList.remove('hidden');
-                        }
+                        // Se nenhum token inicial for fornecido, a lógica dentro de onAuthStateChanged
+                        // já tentará o login anônimo e definirá o userId. Não precisamos de um signInAnonymously aqui.
+                        console.log("Nenhum token inicial fornecido. O onAuthStateChanged lidará com o login.");
                     }
 
                 } catch (error) {
                     console.error("Erro ao inicializar Firebase:", error);
-                    let errorMessage = `Erro crítico ao iniciar a aplicação: ${error.message}`;
-                    if (error.code === 'auth/custom-token-mismatch') {
-                         errorMessage = `Erro de autenticação: O token fornecido é inválido. Por favor, verifique as configurações do Firebase.`;
-                    } else if (error.code === 'auth/admin-restricted-operation') {
-                         errorMessage = `Erro de autenticação: A operação de login (anónimo ou com token) está restrita. Por favor, verifique as configurações de autenticação do seu projeto Firebase.`;
-                    }
-                    loginErrorMessage.textContent = errorMessage;
-                    loginErrorMessage.classList.remove('hidden');
+                    // Como a tela de login foi removida, não há onde exibir a mensagem de erro de login
+                    // Apenas logamos o erro no console.
                 }
-            }
-
-            // Event listener para o formulário de login
-            if (loginForm) {
-                loginForm.addEventListener('submit', async (e) => {
-                    e.preventDefault();
-                    const email = loginEmailInput.value;
-                    const password = loginPasswordInput.value;
-                    try {
-                        await signInWithEmailAndPassword(auth, email, password);
-                        loginErrorMessage.classList.add('hidden'); // Limpa a mensagem de erro se o login for bem-sucedido
-                    } catch (error) {
-                        let message = 'Erro ao fazer login. Verifique o seu e-mail e palavra-passe.';
-                        if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
-                            message = 'E-mail ou palavra-passe inválidos.';
-                        } else if (error.code === 'auth/invalid-email') {
-                            message = 'Formato de e-mail inválido.';
-                        } else if (error.code === 'auth/operation-not-allowed') {
-                            message = 'A operação de login por e-mail/palavra-passe não está ativada no seu projeto Firebase.';
-                        }
-                        loginErrorMessage.textContent = message;
-                        loginErrorMessage.classList.remove('hidden');
-                        console.error("Erro de login:", error.message);
-                    }
-                });
             }
 
             // Event listener para o botão de logout (desktop)
@@ -2829,7 +2834,8 @@
                     try {
                         await signOut(auth);
                         console.log("Utilizador desconectado com sucesso.");
-                        // UI will be handled by onAuthStateChanged listener
+                        // Recarrega a página para resetar o estado e iniciar uma nova sessão anônima
+                        window.location.reload(); 
                     } catch (error) {
                         console.error("Erro ao desconectar:", error.message);
                     }
@@ -2842,7 +2848,8 @@
                     try {
                         await signOut(auth);
                         console.log("Utilizador desconectado com sucesso.");
-                        // UI will be handled by onAuthStateChanged listener
+                        // Recarrega a página para resetar o estado e iniciar uma nova sessão anônima
+                        window.location.reload(); 
                     } catch (error) {
                         console.error("Erro ao desconectar:", error.message);
                     }
@@ -2850,7 +2857,6 @@
             }
 
 
-            // Carregar a página inicial (dashboard) ao carregar (inicialmente oculto até logar)
             // showPage('dashboard'); // Esta chamada será feita dentro do onAuthStateChanged
 
             // Atualizar o estado do chat ao carregar a página
@@ -2883,6 +2889,10 @@
                     sendChatMessage("Por favor, atualize os meus dados financeiros.");
                 });
             }
+            // NOVO: Event listener para o botão Limpar Chat
+            if (clearChatButton) {
+                clearChatButton.addEventListener('click', clearChat);
+            }
 
             // Event listener para o novo botão de Gerar Insights Financeiros
             const generateInsightsButton = document.getElementById('generate-insights-button');
@@ -2912,6 +2922,7 @@
                     chatInput.disabled = false;
                     sendButton.disabled = false;
                     refreshChatDataButton.disabled = false;
+                    clearChatButton.disabled = false; // Habilita o botão Limpar Chat
                     chatInput.placeholder = "Digite a sua mensagem...";
                     // Verifica se a mensagem de "insira a sua chave" ainda está presente e a remove
                     const initialAiMessage = chatMessagesDiv.querySelector('.flex.justify-start .bg-gray-100');
@@ -2924,6 +2935,7 @@
                     chatInput.disabled = true;
                     sendButton.disabled = true;
                     refreshChatDataButton.disabled = true;
+                    clearChatButton.disabled = true; // Desabilita o botão Limpar Chat
                     chatInput.placeholder = "Assistente não configurado...";
                 }
             }
@@ -3010,27 +3022,10 @@
                 saveApiKeysModalButton.addEventListener('click', saveApiKeys);
             }
 
-            // Listener para o campo Persona (NOVO)
-            aiPersonaInput.addEventListener('input', () => {
-                aiConfig.persona = aiPersonaInput.value;
-                saveAiConfig();
-            });
-
-            // Listener para o slider de Simpatia (NOVO)
-            aiSympathySlider.addEventListener('input', () => {
-                const value = parseInt(aiSympathySlider.value, 10);
-                aiSympathyLabel.textContent = getSympathyLabel(value);
-                aiConfig.sympathy = value;
-                saveAiConfig();
-            });
-
-            // Listener para o slider de Profundidade (NOVO)
-            aiDepthSlider.addEventListener('input', () => {
-                const value = parseInt(aiDepthSlider.value, 10);
-                aiDepthLabel.textContent = getDepthLabel(value);
-                aiConfig.depth = value;
-                saveAiConfig();
-            });
+            // NOVO: Listener para o botão Salvar Configurações da IA
+            if (saveAiConfigButton) {
+                saveAiConfigButton.addEventListener('click', manualSaveAiConfig);
+            }
             
             transactionDateInput.valueAsDate = new Date();
 
