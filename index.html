@@ -5511,5 +5511,78 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 </script>
 
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const chatInput = document.getElementById("chat-input");
+    const chatSendButton = document.getElementById("chat-send-button");
+    const chatMessages = document.getElementById("chat-messages");
+    const loadingIndicator = document.getElementById("chat-loading-indicator");
+
+    async function sendChatMessage(message) {
+        const persona = document.getElementById("ai-persona")?.value?.trim() || "";
+        const personality = document.getElementById("ai-personality")?.value?.trim() || "";
+
+        const fullPrompt = \`Você é um assistente financeiro.
+Personagem: \${persona}
+Personalidade: \${personality}
+
+Comporte-se de acordo com essas instruções em todas as respostas.\`;
+
+        const messages = [
+            { role: "system", content: fullPrompt },
+            { role: "user", content: message }
+        ];
+
+        // Exibe mensagem do usuário
+        const userDiv = document.createElement("div");
+        userDiv.className = "flex justify-end";
+        userDiv.innerHTML = \`
+            <div class="bg-blue-100 text-blue-800 p-3 rounded-xl rounded-br-none max-w-xs md:max-w-md shadow-sm">
+                \${message}
+            </div>
+        \`;
+        chatMessages.appendChild(userDiv);
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+
+        // Mostra indicador de carregamento
+        loadingIndicator.classList.remove("hidden");
+
+        try {
+            // Simulação: substitua aqui pela chamada real da API Gemini
+            const responseText = "Ahoy! Eu sou um papagaio pirata rude e aqui tá tua resposta sobre finanças. 🦜💰";
+
+            const aiDiv = document.createElement("div");
+            aiDiv.className = "flex justify-start";
+            aiDiv.innerHTML = \`
+                <div class="bg-gray-100 text-gray-800 p-3 rounded-xl rounded-bl-none max-w-xs md:max-w-md shadow-sm">
+                    \${responseText}
+                </div>
+            \`;
+            chatMessages.appendChild(aiDiv);
+        } catch (e) {
+            alert("Erro ao se comunicar com a IA.");
+        } finally {
+            loadingIndicator.classList.add("hidden");
+            chatInput.value = "";
+        }
+    }
+
+    chatSendButton?.addEventListener("click", function () {
+        const message = chatInput.value.trim();
+        if (message) {
+            sendChatMessage(message);
+        }
+    });
+
+    chatInput?.addEventListener("keydown", function (e) {
+        if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            chatSendButton.click();
+        }
+    });
+});
+</script>
+
 </body>
 </html>
