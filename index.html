@@ -888,7 +888,8 @@
         // Importa os módulos necessários do Firebase
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         // Adicionado signInWithEmailAndPassword para login por e-mail/senha
-        import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        // REMOVIDO: signInAnonymously
+        import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, getDoc, collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // Variáveis globais do ambiente Canvas (preenchidas em tempo de execução)
@@ -1452,7 +1453,7 @@
                 if (pageId === 'chat') {
                     chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
                 } else if (pageId === 'categories-management') {
-                    renderCategories();
+                    renderCategories(categorySearchInput.value); // Passa o valor do input de busca
                 } else if (pageId === 'transactions') {
                     renderTransactions();
                     updateDashboardAndTransactionSummaries();
@@ -2812,26 +2813,7 @@
                             loginScreen.classList.remove('hidden'); // Mostra a tela de login
                             appContent.classList.add('hidden'); // Esconde o conteúdo do app
                             console.log("Usuário não autenticado. Mostrando tela de login.");
-
-                            // Se não houver token inicial, tenta login anônimo para persistência de dados
-                            // Isso é importante para que o Firestore funcione mesmo sem um login de e-mail/senha
-                            if (!initialAuthToken && !auth.currentUser) {
-                                try {
-                                    await signInAnonymously(auth);
-                                    if (auth.currentUser) {
-                                        userId = auth.currentUser.uid;
-                                        console.log("Login anônimo bem-sucedido. UID:", userId);
-                                    }
-                                } catch (anonError) {
-                                    console.error("Falha no login anônimo. Verifique se a autenticação anônima está ativada no Firebase:", anonError);
-                                    // Se o login anônimo falhar, ainda podemos gerar um userId temporário
-                                    // mas as operações do Firestore podem falhar se as regras exigirem autenticação.
-                                    if (!userId) { // Garante que um userId seja gerado se tudo mais falhar
-                                        userId = crypto.randomUUID();
-                                        console.warn("Nenhum usuário autenticado e login anônimo falhou. Usando ID temporário para persistência (Firestore pode ter restrições).", userId);
-                                    }
-                                }
-                            }
+                            // Não tenta login anônimo aqui, apenas mostra a tela de login.
                         }
                     });
 
@@ -2854,7 +2836,7 @@
                         }
                     } else {
                         // Se não houver token inicial, a tela de login já estará visível e o usuário pode tentar e-mail/senha
-                        console.log("Nenhum token inicial fornecido. Usuário deve fazer login com e-mail/senha ou login anônimo será tentado.");
+                        console.log("Nenhum token inicial fornecido. Usuário deve fazer login com e-mail/senha.");
                     }
 
                 } catch (error) {
