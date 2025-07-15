@@ -5476,5 +5476,40 @@
                 });
             }
         });
-    </script></body>
+    </script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    const chatInput = document.getElementById("chat-input");
+    const chatSendButton = document.getElementById("chat-send-button");
+    const personaField = document.getElementById("ai-persona");
+    const personalityField = document.getElementById("ai-personality");
+    const chatWarning = document.createElement("div");
+    chatWarning.className = "text-red-500 text-sm text-center w-full mb-2";
+    chatWarning.textContent = "Configure o Personagem e a Personalidade da IA para ativar o chat.";
+    chatWarning.id = "chat-warning";
+    chatInput.parentNode.insertBefore(chatWarning, chatInput);
+    
+    function updateChatState() {
+        const persona = personaField?.value?.trim();
+        const personality = personalityField?.value?.trim();
+        const valid = persona && personality;
+        chatInput.disabled = !valid;
+        chatSendButton.disabled = !valid;
+        chatWarning.style.display = valid ? "none" : "block";
+        if (!valid) {
+            chatInput.placeholder = "Preencha as configurações da IA para começar.";
+        } else {
+            chatInput.placeholder = "Digite sua mensagem...";
+        }
+    }
+
+    if (personaField && personalityField) {
+        personaField.addEventListener("input", updateChatState);
+        personalityField.addEventListener("input", updateChatState);
+        updateChatState();
+    }
+});
+</script>
+
+</body>
 </html>
