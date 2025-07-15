@@ -1,0 +1,17 @@
+/* Estilos básicos para começar */
+body {
+    font-family: sans-serif;
+    background-color: #f0f2f5;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+}
+
+#app-container {
+    width: 100%;
+    max-width: 400px;
+    margin: auto;
+}
