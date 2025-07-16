@@ -229,7 +229,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Elementos da Seção de Transações (Resumo)
     const transactionsCurrentBalance = document.getElementById('transactions-current-balance');
-    const transactionsTotalExpenses = document.getElementById('transactions-total-expenses');
+    const transactionsPaidExpenses = document.getElementById('transactions-paid-expenses');
+    const transactionsPendingExpenses = document.getElementById('transactions-pending-expenses');
     const transactionsTotalCaixinhasSaved = document.getElementById('transactions-total-caixinhas-saved'); 
 
     // Elementos do Orçamento
@@ -576,32 +577,44 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Função para atualizar os cards de resumo no Dashboard e Transações
     function updateDashboardAndTransactionSummaries() {
         let totalIncome = 0;
-        let totalExpenses = 0;
+        let totalPaidExpenses = 0;
+        let totalPendingExpenses = 0;
         let currentBalance = 0;
 
         transactions.forEach(t => {
-            // Determina o tipo de transação para cálculo de saldo
-            let effectiveType = t.type;
-            if (t.type === 'caixinha') {
-                effectiveType = t.transactionType === 'deposit' ? 'expense' : 'income'; // Depósito é uma "despesa" do saldo principal, resgate é uma "receita"
-            }
-
-            if (effectiveType === 'income' && (t.status === 'Recebido' || t.status === 'Pago' || t.status === 'Confirmado')) { 
+            const isConfirmed = t.status === 'Recebido' || t.status === 'Pago' || t.status === 'Confirmado';
+            
+            if (t.type === 'income' && isConfirmed) {
                 totalIncome += parseFloat(t.amount);
-            } else if (effectiveType === 'expense' && (t.status === 'Pago' || t.status === 'Recebido' || t.status === 'Confirmado')) { 
-                totalExpenses += parseFloat(t.amount);
+            } else if (t.type === 'expense') {
+                if (isConfirmed) {
+                    totalPaidExpenses += parseFloat(t.amount);
+                } else if (t.status === 'Pendente') {
+                    totalPendingExpenses += parseFloat(t.amount);
+                }
+            } else if (t.type === 'caixinha' && isConfirmed) {
+                // Depósito em caixinha é considerado uma "despesa paga" para o cálculo do saldo principal
+                if (t.transactionType === 'deposit') {
+                    totalPaidExpenses += parseFloat(t.amount);
+                }
+                // Resgate de caixinha é considerado uma "receita" para o cálculo do saldo principal
+                else if (t.transactionType === 'withdraw') {
+                    totalIncome += parseFloat(t.amount);
+                }
             }
         });
-        currentBalance = totalIncome - totalExpenses;
+        
+        currentBalance = totalIncome - totalPaidExpenses;
 
         // Atualiza Dashboard
         dashboardCurrentBalance.textContent = formatCurrency(currentBalance);
         dashboardMonthlyIncome.textContent = formatCurrency(totalIncome);
-        dashboardMonthlyExpenses.textContent = formatCurrency(totalExpenses);
+        dashboardMonthlyExpenses.textContent = formatCurrency(totalPaidExpenses);
 
         // Atualiza Resumo em Transações
         transactionsCurrentBalance.textContent = formatCurrency(currentBalance);
-        transactionsTotalExpenses.textContent = formatCurrency(totalExpenses);
+        transactionsPaidExpenses.textContent = formatCurrency(totalPaidExpenses);
+        transactionsPendingExpenses.textContent = formatCurrency(totalPendingExpenses);
 
         // Atualiza Total Guardado (Caixinhas) - Agora filtra das categorias
         let totalCaixinhasSaved = categories
@@ -1548,6 +1561,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     function getFinancialDataForAI() {
         let dataString = "";
 
+        // Adicionar Resumo Financeiro Principal
+        dataString += "<strong>Resumo Financeiro Principal:</strong><br>";
+        dataString += `- Saldo Atual: ${transactionsCurrentBalance.textContent}<br>`;
+        dataString += `- Total de Despesas Pagas: ${transactionsPaidExpenses.textContent}<br>`;
+        dataString += `- Total de Despesas Pendentes: ${transactionsPendingExpenses.textContent}<br>`;
+        dataString += `- Total Guardado (Caixinhas): ${transactionsTotalCaixinhasSaved.textContent}<br><br>`;
+
         // Adicionar Categorias e Caixinhas
         dataString += "<strong>Categorias e Caixinhas Cadastradas:</strong><br><br>";
         if (categories.length > 0) {
@@ -1627,83 +1647,86 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     async function sendChatMessage(userMessage) {
-        if (isSendingMessage) return;
+        if (isSendingMessage) {
+            return; 
+        }
+
         if (userMessage.trim() === '') return;
-    
+
         const activeApiKey = getActiveGeminiApiKey();
+        // Check if the Gemini API is confirmed ready
         if (!isGeminiApiReady || !activeApiKey) {
             appendMessage('ai', 'O assistente de IA não está configurado. Por favor, insira sua chave da API Gemini nas "Mais Opções".', 'error');
             console.error("Gemini API not ready to send message or API key missing.");
             return;
         }
-    
+
         isSendingMessage = true;
         appendMessage('user', userMessage);
         chatInput.value = '';
         chatLoadingIndicator.classList.remove('hidden');
-    
-        const persona = aiConfig.aiPersona || "Você é um educador financeiro especialista...";
+
+        // Construir a instrução do sistema com base nas configurações da IA
+        const persona = aiConfig.aiPersona || "";
         const personality = aiConfig.aiPersonality || "";
-    
-        const baseSystemInstruction = {
-            role: "user", 
-            parts: [{ text: `Você é um assistente financeiro com inteligência contextual, integrado a um aplicativo de finanças pessoais. Sua principal função é analisar dados financeiros do usuário (como receitas, despesas, orçamentos, categorias e caixinhas), identificar padrões, propor melhorias e orientar com base em metas, equilíbrio e sustentabilidade financeira.
-    
-    As instruções de quem você é e como deve se comportar são definidas dinamicamente pelos campos abaixo:
-    <strong>Personagem:</strong> ${persona}
-    <strong>Personalidade:</strong> ${personality}
-    
-    Você deve interpretar esses campos como regras absolutas para seu papel e tom.
-    
-    Você **sempre tem acesso a um retrato atualizado das finanças do usuário**, fornecido junto à mensagem. Use essas informações para gerar respostas contextualizadas, consistentes e inteligentes. Nunca peça dados que já estão no bloco.
-    
-    ---
-    
-    <strong>Glossário do app (obrigatório conhecer):</strong>
-    - <strong>Caixinha:</strong> Meta de poupança onde o usuário guarda ou resgata dinheiro. Pode ter um valor alvo.
-    - <strong>Orçamento:</strong> Limite de gastos por categoria em um determinado mês.
-    - <strong>Saldo Atual:</strong> Valor disponível no momento.
-    - <strong>Receitas do Mês:</strong> Total de entradas no mês.
-    - <strong>Despesas do Mês:</strong> Total de saídas no mês.
-    
-    <strong>Seções do app:</strong>
-    - "Visão Geral", "Transações", "Assistente IA", "Mais Opções"
-    - Subtelas: "Categorias e Caixinhas", "Orçamento", "Configurar IA", "Chave de API Gemini"
-    
-    <strong>Guia de navegação no app:</strong>
-    - Para adicionar uma transação: vá em <strong>Transações > Adicionar Transação</strong>
-    - Para editar categorias ou criar caixinhas: vá em <strong>Mais Opções > Categorias e Caixinhas</strong>
-    - Para ajustar limites de gasto: <strong>Mais Opções > Orçamento > Configurar Orçamento Mensal</strong>
-    - Para ajustar o assistente: <strong>Mais Opções > Configurar IA</strong>
-    - Para pedir sugestões com IA: <strong>Mais Opções > Otimizar Orçamento com IA</strong>
-    
-    Você pode sugerir ações, fazer perguntas e tomar iniciativa. Mas <strong>nunca execute ações no app</strong> — apenas oriente o usuário sobre o que fazer.
-    
-    ---
-    
-    <strong>Estilo de resposta:</strong>
-    - <strong>Sem Markdown:</strong> Use apenas HTML básico (<strong>, <br>, <ul>, <li>) — nunca use *, #, _.
-    - <strong>Respostas enxutas:</strong> Seja direto, objetivo e claro.
-    - <strong>Sem dados técnicos internos:</strong> Nunca exiba IDs, nomes de variáveis ou estruturas do sistema.
-    - <strong>Com iniciativa:</strong> Após respostas como “ok” ou “entendi”, continue com algo útil.
-    - <strong>Se faltarem dados:</strong> Avise o usuário e oriente a registrar as informações necessárias.
-    
-    ---
-    
-    <strong>Ambiente técnico:</strong>
-    Você roda dentro de um app HTML local, com dados financeiros dinâmicos enviados via Firebase Firestore e exibidos em tempo real. Cada resposta que você dá recebe um novo bloco de dados atualizados. Use isso como base sólida para suas decisões.
-    
-    <strong>Objetivo final:</strong>
-    Ser o cérebro financeiro do usuário — confiável, atento, útil, direto e adaptável — seguindo rigorosamente as instruções recebidas no Personagem e Personalidade.` }]
-        };
-    
-        const modelResponseForSystem = { role: "model", parts: [{ text: "Entendido. Estou pronto para ajudar seguindo todas as diretrizes." }] };
-    
+
+        const baseSystemInstruction = `Você é um assistente financeiro com inteligência contextual, integrado a um aplicativo de finanças pessoais. Sua principal função é analisar dados financeiros do usuário (como receitas, despesas, orçamentos, categorias e caixinhas), identificar padrões, propor melhorias e orientar com base em metas, equilíbrio e sustentabilidade financeira.
+
+As instruções de quem você é e como deve se comportar são definidas dinamicamente pelos campos abaixo:
+<strong>Personagem:</strong> ${persona}
+<strong>Personalidade:</strong> ${personality}
+
+Você deve interpretar esses campos como regras absolutas para seu papel e tom.
+
+Você **sempre tem acesso a um retrato atualizado das finanças do usuário**, fornecido junto à mensagem. Use essas informações para gerar respostas contextualizadas, consistentes e inteligentes. Nunca peça dados que já estão no bloco.
+**NUNCA FAÇA CÁLCULOS!** Todos os dados, incluindo totais como "Saldo Atual", são fornecidos prontos pelo app. Sua função é interpretar e aconselhar com base nos dados que você recebe, não calculá-los.
+
+---
+
+<strong>Glossário do app (obrigatório conhecer):</strong>
+- <strong>Caixinha:</strong> Meta de poupança onde o usuário guarda ou resgata dinheiro. Pode ter um valor alvo.
+- <strong>Orçamento:</strong> Limite de gastos por categoria em um determinado mês.
+- <strong>Saldo Atual:</strong> Valor disponível no momento.
+- <strong>Receitas do Mês:</strong> Total de entradas no mês.
+- <strong>Despesas do Mês:</strong> Total de saídas no mês.
+
+<strong>Seções do app:</strong>
+- "Visão Geral", "Transações", "Assistente IA", "Mais Opções"
+- Subtelas: "Categorias e Caixinhas", "Orçamento", "Configurar IA", "Chave de API Gemini"
+
+<strong>Guia de navegação no app:</strong>
+- Para adicionar uma transação: vá em <strong>Transações > Adicionar Transação</strong>
+- Para editar categorias ou criar caixinhas: vá em <strong>Mais Opções > Categorias e Caixinhas</strong>
+- Para ajustar limites de gasto: <strong>Mais Opções > Orçamento > Configurar Orçamento Mensal</strong>
+- Para ajustar o assistente: <strong>Mais Opções > Configurar IA</strong>
+- Para pedir sugestões com IA: <strong>Mais Opções > Otimizar Orçamento com IA</strong>
+
+Você pode sugerir ações, fazer perguntas e tomar iniciativa. Mas <strong>nunca execute ações no app</strong> — apenas oriente o usuário sobre o que fazer.
+
+---
+
+<strong>Estilo de resposta:</strong>
+- <strong>Sem Markdown:</strong> Use apenas HTML básico (<strong>, <br>, <ul>, <li>) — nunca use *, #, _.
+- <strong>Respostas enxutas:</strong> Seja direto, objetivo e claro.
+- <strong>Sem dados técnicos internos:</strong> Nunca exiba IDs, nomes de variáveis ou estruturas do sistema.
+- <strong>Com iniciativa:</strong> Após respostas como “ok” ou “entendi”, continue com algo útil.
+- <strong>Se faltarem dados:</strong> Avise o usuário e oriente a registrar as informações necessárias.
+
+---
+
+<strong>Ambiente técnico:</strong>
+Você roda dentro de um app HTML local, com dados financeiros dinâmicos enviados via Firebase Firestore e exibidos em tempo real. Cada resposta que você dá recebe um novo bloco de dados atualizados. Use isso como base sólida para suas decisões.
+
+<strong>Objetivo final:</strong>
+Ser o cérebro financeiro do usuário — confiável, atento, útil, direto e adaptável — seguindo rigorosamente as instruções recebidas no Personagem e Personalidade.`;
+
+
         let currentFinancialData = '';
         const refreshKeywords = ["atualizar dados", "recarregar dados", "consultar dados", "verificar finanças", "novos dados", "dados atuais", "meus dados", "favor, atualize meus dados financeiros"]; 
-    
+
         const needsRefresh = refreshKeywords.some(keyword => userMessage.toLowerCase().includes(keyword));
-    
+
+        // Apenas consulta dados na primeira mensagem ou se houver uma solicitação explícita de atualização
         if (!hasConsultedFinancialData || needsRefresh) {
             currentFinancialData = getFinancialDataForAI();
             lastFinancialDataString = currentFinancialData;
@@ -1713,28 +1736,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             } else {
                  appendMessage('ai', 'Carregando e analisando seus dados financeiros para a nossa conversa. Isso pode levar um momento...', 'info');
             }
-        } else {
-            currentFinancialData = lastFinancialDataString;
         }
-    
-        const financialDataContext = { role: "user", parts: [{ text: `Atenção: A seguir estão os dados financeiros atuais do usuário para seu conhecimento. Use-os para responder. Não mencione este bloco de dados para o usuário.\n\n${currentFinancialData}`}]};
-        const modelResponseForFinancialData = { role: "model", parts: [{ text: "Ok, dados financeiros recebidos e analisados." }] };
-    
-        const newUserMessage = { role: "user", parts: [{ text: userMessage }] };
-    
-        const contentsPayload = [
-            baseSystemInstruction,
-            modelResponseForSystem,
-            ...chatHistory,
-            financialDataContext,
-            modelResponseForFinancialData,
-            newUserMessage
-        ];
-    
+
+        // Constrói o histórico de chat para enviar à API
+        const contentsPayload = [...chatHistory];
+
+        // Adiciona a mensagem atual do usuário com os dados financeiros (se necessário)
+        const userPromptWithData = `${userMessage}\n\n${currentFinancialData}`;
+        contentsPayload.push({ role: "user", parts: [{ text: userPromptWithData }] });
+
         try {
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${activeApiKey}`;
             
             const payload = {
+                systemInstruction: { role: "system", parts: [{ text: baseSystemInstruction }] }, // Adicionando a instrução do sistema
                 contents: contentsPayload, 
                 generationConfig: {
                     temperature: 0.7, 
@@ -1749,25 +1764,24 @@ document.addEventListener('DOMContentLoaded', async () => {
                     { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
                 ]
             };
-    
+
             const response = await fetch(apiUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
-    
+
             const result = await response.json();
-    
+
             if (result.candidates && result.candidates.length > 0 &&
                 result.candidates[0].content && result.candidates[0].content.parts &&
                 result.candidates[0].content.parts.length > 0) {
                 const aiResponseText = result.candidates[0].content.parts[0].text;
                 appendMessage('ai', aiResponseText);
                 
-                // Salva a mensagem do usuário real e a resposta do modelo no histórico
-                chatHistory.push(newUserMessage);
+                chatHistory.push({ role: "user", parts: [{ text: userMessage }] }); // Salva apenas a mensagem do usuário
                 chatHistory.push({ role: "model", parts: [{ text: aiResponseText }] });
-    
+
                 if (chatHistory.length > 20) { 
                     chatHistory = chatHistory.slice(chatHistory.length - 20);
                 }
@@ -1784,6 +1798,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             chatLoadingIndicator.classList.add('hidden');
             chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
             isSendingMessage = false; 
+            hasConsultedFinancialData = false; // Reset the flag after each message to get fresh data next time if needed
         }
     }
 
@@ -2330,3 +2345,5 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 });
+
+    
