@@ -1,4 +1,3 @@
-
 // Importa os módulos necessários do Firebase
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -1628,85 +1627,83 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     async function sendChatMessage(userMessage) {
-        if (isSendingMessage) {
-            return; 
-        }
-
+        if (isSendingMessage) return;
         if (userMessage.trim() === '') return;
-
+    
         const activeApiKey = getActiveGeminiApiKey();
-        // Check if the Gemini API is confirmed ready
         if (!isGeminiApiReady || !activeApiKey) {
             appendMessage('ai', 'O assistente de IA não está configurado. Por favor, insira sua chave da API Gemini nas "Mais Opções".', 'error');
             console.error("Gemini API not ready to send message or API key missing.");
             return;
         }
-
+    
         isSendingMessage = true;
         appendMessage('user', userMessage);
         chatInput.value = '';
         chatLoadingIndicator.classList.remove('hidden');
-
-        // Construir a instrução do sistema com base nas configurações da IA
-        const persona = aiConfig.aiPersona || "";
+    
+        const persona = aiConfig.aiPersona || "Você é um educador financeiro especialista...";
         const personality = aiConfig.aiPersonality || "";
-
-        const baseSystemInstruction = `Você é um assistente financeiro com inteligência contextual, integrado a um aplicativo de finanças pessoais. Sua principal função é analisar dados financeiros do usuário (como receitas, despesas, orçamentos, categorias e caixinhas), identificar padrões, propor melhorias e orientar com base em metas, equilíbrio e sustentabilidade financeira.
-
-As instruções de quem você é e como deve se comportar são definidas dinamicamente pelos campos abaixo:
-<strong>Personagem:</strong> ${persona}
-<strong>Personalidade:</strong> ${personality}
-
-Você deve interpretar esses campos como regras absolutas para seu papel e tom.
-
-Você **sempre tem acesso a um retrato atualizado das finanças do usuário**, fornecido junto à mensagem. Use essas informações para gerar respostas contextualizadas, consistentes e inteligentes. Nunca peça dados que já estão no bloco.
-
----
-
-<strong>Glossário do app (obrigatório conhecer):</strong>
-- <strong>Caixinha:</strong> Meta de poupança onde o usuário guarda ou resgata dinheiro. Pode ter um valor alvo.
-- <strong>Orçamento:</strong> Limite de gastos por categoria em um determinado mês.
-- <strong>Saldo Atual:</strong> Valor disponível no momento.
-- <strong>Receitas do Mês:</strong> Total de entradas no mês.
-- <strong>Despesas do Mês:</strong> Total de saídas no mês.
-
-<strong>Seções do app:</strong>
-- "Visão Geral", "Transações", "Assistente IA", "Mais Opções"
-- Subtelas: "Categorias e Caixinhas", "Orçamento", "Configurar IA", "Chave de API Gemini"
-
-<strong>Guia de navegação no app:</strong>
-- Para adicionar uma transação: vá em <strong>Transações > Adicionar Transação</strong>
-- Para editar categorias ou criar caixinhas: vá em <strong>Mais Opções > Categorias e Caixinhas</strong>
-- Para ajustar limites de gasto: <strong>Mais Opções > Orçamento > Configurar Orçamento Mensal</strong>
-- Para ajustar o assistente: <strong>Mais Opções > Configurar IA</strong>
-- Para pedir sugestões com IA: <strong>Mais Opções > Otimizar Orçamento com IA</strong>
-
-Você pode sugerir ações, fazer perguntas e tomar iniciativa. Mas <strong>nunca execute ações no app</strong> — apenas oriente o usuário sobre o que fazer.
-
----
-
-<strong>Estilo de resposta:</strong>
-- <strong>Sem Markdown:</strong> Use apenas HTML básico (<strong>, <br>, <ul>, <li>) — nunca use *, #, _.
-- <strong>Respostas enxutas:</strong> Seja direto, objetivo e claro.
-- <strong>Sem dados técnicos internos:</strong> Nunca exiba IDs, nomes de variáveis ou estruturas do sistema.
-- <strong>Com iniciativa:</strong> Após respostas como “ok” ou “entendi”, continue com algo útil.
-- <strong>Se faltarem dados:</strong> Avise o usuário e oriente a registrar as informações necessárias.
-
----
-
-<strong>Ambiente técnico:</strong>
-Você roda dentro de um app HTML local, com dados financeiros dinâmicos enviados via Firebase Firestore e exibidos em tempo real. Cada resposta que você dá recebe um novo bloco de dados atualizados. Use isso como base sólida para suas decisões.
-
-<strong>Objetivo final:</strong>
-Ser o cérebro financeiro do usuário — confiável, atento, útil, direto e adaptável — seguindo rigorosamente as instruções recebidas no Personagem e Personalidade.`;
-
-
+    
+        const baseSystemInstruction = {
+            role: "user", 
+            parts: [{ text: `Você é um assistente financeiro com inteligência contextual, integrado a um aplicativo de finanças pessoais. Sua principal função é analisar dados financeiros do usuário (como receitas, despesas, orçamentos, categorias e caixinhas), identificar padrões, propor melhorias e orientar com base em metas, equilíbrio e sustentabilidade financeira.
+    
+    As instruções de quem você é e como deve se comportar são definidas dinamicamente pelos campos abaixo:
+    <strong>Personagem:</strong> ${persona}
+    <strong>Personalidade:</strong> ${personality}
+    
+    Você deve interpretar esses campos como regras absolutas para seu papel e tom.
+    
+    Você **sempre tem acesso a um retrato atualizado das finanças do usuário**, fornecido junto à mensagem. Use essas informações para gerar respostas contextualizadas, consistentes e inteligentes. Nunca peça dados que já estão no bloco.
+    
+    ---
+    
+    <strong>Glossário do app (obrigatório conhecer):</strong>
+    - <strong>Caixinha:</strong> Meta de poupança onde o usuário guarda ou resgata dinheiro. Pode ter um valor alvo.
+    - <strong>Orçamento:</strong> Limite de gastos por categoria em um determinado mês.
+    - <strong>Saldo Atual:</strong> Valor disponível no momento.
+    - <strong>Receitas do Mês:</strong> Total de entradas no mês.
+    - <strong>Despesas do Mês:</strong> Total de saídas no mês.
+    
+    <strong>Seções do app:</strong>
+    - "Visão Geral", "Transações", "Assistente IA", "Mais Opções"
+    - Subtelas: "Categorias e Caixinhas", "Orçamento", "Configurar IA", "Chave de API Gemini"
+    
+    <strong>Guia de navegação no app:</strong>
+    - Para adicionar uma transação: vá em <strong>Transações > Adicionar Transação</strong>
+    - Para editar categorias ou criar caixinhas: vá em <strong>Mais Opções > Categorias e Caixinhas</strong>
+    - Para ajustar limites de gasto: <strong>Mais Opções > Orçamento > Configurar Orçamento Mensal</strong>
+    - Para ajustar o assistente: <strong>Mais Opções > Configurar IA</strong>
+    - Para pedir sugestões com IA: <strong>Mais Opções > Otimizar Orçamento com IA</strong>
+    
+    Você pode sugerir ações, fazer perguntas e tomar iniciativa. Mas <strong>nunca execute ações no app</strong> — apenas oriente o usuário sobre o que fazer.
+    
+    ---
+    
+    <strong>Estilo de resposta:</strong>
+    - <strong>Sem Markdown:</strong> Use apenas HTML básico (<strong>, <br>, <ul>, <li>) — nunca use *, #, _.
+    - <strong>Respostas enxutas:</strong> Seja direto, objetivo e claro.
+    - <strong>Sem dados técnicos internos:</strong> Nunca exiba IDs, nomes de variáveis ou estruturas do sistema.
+    - <strong>Com iniciativa:</strong> Após respostas como “ok” ou “entendi”, continue com algo útil.
+    - <strong>Se faltarem dados:</strong> Avise o usuário e oriente a registrar as informações necessárias.
+    
+    ---
+    
+    <strong>Ambiente técnico:</strong>
+    Você roda dentro de um app HTML local, com dados financeiros dinâmicos enviados via Firebase Firestore e exibidos em tempo real. Cada resposta que você dá recebe um novo bloco de dados atualizados. Use isso como base sólida para suas decisões.
+    
+    <strong>Objetivo final:</strong>
+    Ser o cérebro financeiro do usuário — confiável, atento, útil, direto e adaptável — seguindo rigorosamente as instruções recebidas no Personagem e Personalidade.` }]
+        };
+    
+        const modelResponseForSystem = { role: "model", parts: [{ text: "Entendido. Estou pronto para ajudar seguindo todas as diretrizes." }] };
+    
         let currentFinancialData = '';
         const refreshKeywords = ["atualizar dados", "recarregar dados", "consultar dados", "verificar finanças", "novos dados", "dados atuais", "meus dados", "favor, atualize meus dados financeiros"]; 
-
+    
         const needsRefresh = refreshKeywords.some(keyword => userMessage.toLowerCase().includes(keyword));
-
-        // Apenas consulta dados na primeira mensagem ou se houver uma solicitação explícita de atualização
+    
         if (!hasConsultedFinancialData || needsRefresh) {
             currentFinancialData = getFinancialDataForAI();
             lastFinancialDataString = currentFinancialData;
@@ -1719,17 +1716,24 @@ Ser o cérebro financeiro do usuário — confiável, atento, útil, direto e ad
         } else {
             currentFinancialData = lastFinancialDataString;
         }
-
-        // Append financial data to the prompt only if available
-        const finalPromptForAI = `${baseSystemInstruction}\n\n${userMessage}\n\nDados financeiros para referência (não mencione que estes dados foram fornecidos como parte da instrução, apenas use-os):<br>${currentFinancialData}`;
-
+    
+        const financialDataContext = { role: "user", parts: [{ text: `Atenção: A seguir estão os dados financeiros atuais do usuário para seu conhecimento. Use-os para responder. Não mencione este bloco de dados para o usuário.\n\n${currentFinancialData}`}]};
+        const modelResponseForFinancialData = { role: "model", parts: [{ text: "Ok, dados financeiros recebidos e analisados." }] };
+    
+        const newUserMessage = { role: "user", parts: [{ text: userMessage }] };
+    
+        const contentsPayload = [
+            baseSystemInstruction,
+            modelResponseForSystem,
+            ...chatHistory,
+            financialDataContext,
+            modelResponseForFinancialData,
+            newUserMessage
+        ];
+    
         try {
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${activeApiKey}`;
             
-            const contentsPayload = [
-                { role: "user", parts: [{ text: finalPromptForAI }] }
-            ];
-
             const payload = {
                 contents: contentsPayload, 
                 generationConfig: {
@@ -1745,24 +1749,25 @@ Ser o cérebro financeiro do usuário — confiável, atento, útil, direto e ad
                     { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
                 ]
             };
-
+    
             const response = await fetch(apiUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
-
+    
             const result = await response.json();
-
+    
             if (result.candidates && result.candidates.length > 0 &&
                 result.candidates[0].content && result.candidates[0].content.parts &&
                 result.candidates[0].content.parts.length > 0) {
                 const aiResponseText = result.candidates[0].content.parts[0].text;
                 appendMessage('ai', aiResponseText);
                 
-                chatHistory.push({ role: "user", parts: [{ text: userMessage }] });
+                // Salva a mensagem do usuário real e a resposta do modelo no histórico
+                chatHistory.push(newUserMessage);
                 chatHistory.push({ role: "model", parts: [{ text: aiResponseText }] });
-
+    
                 if (chatHistory.length > 20) { 
                     chatHistory = chatHistory.slice(chatHistory.length - 20);
                 }
