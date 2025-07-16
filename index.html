@@ -122,21 +122,32 @@
                         <div>
                             <p class="text-base text-gray-600">Saldo Atual</p>
                             <p class="font-bold text-3xl text-[var(--color-blue-primary)]" id="transactions-current-balance">R$ 0,00</p>
-                            <p class="text-sm text-gray-500">Receitas - Despesas</p>
+                            <p class="text-sm text-gray-500">Receitas - Despesas Pagas</p>
                         </div>
                         <!-- Ícone de carteira -->
                         <i class="fa-solid fa-wallet text-3xl"></i>
                     </div>
 
-                    <!-- Card Total de Despesas (agora calculado dinamicamente) -->
+                    <!-- Card Despesas Pagas (antigo "Total de Despesas") -->
                     <div class="bg-white p-5 rounded-lg shadow-md flex items-center justify-between">
                         <div>
-                            <p class="text-base text-gray-600">Total de Despesas</p>
-                            <p class="font-bold text-3xl text-[var(--color-red-negative)]" id="transactions-total-expenses">R$ 0,00</p>
-                            <p class="text-sm text-gray-500">Soma de todas as despesas</p>
+                            <p class="text-base text-gray-600">Despesas Pagas</p>
+                            <p class="font-bold text-3xl text-[var(--color-red-negative)]" id="transactions-paid-expenses">R$ 0,00</p>
+                            <p class="text-sm text-gray-500">Soma de todas as despesas pagas.</p>
                         </div>
                         <!-- Ícone de seta para baixo ou similar para despesas -->
-                        <i class="fa-solid fa-arrow-trend-down text-3xl"></i>
+                        <i class="fa-solid fa-circle-check text-3xl text-green-500"></i>
+                    </div>
+
+                    <!-- NOVO Card Despesas Pendentes -->
+                    <div class="bg-white p-5 rounded-lg shadow-md flex items-center justify-between">
+                        <div>
+                            <p class="text-base text-gray-600">Despesas Pendentes</p>
+                            <p class="font-bold text-3xl text-yellow-600" id="transactions-pending-expenses">R$ 0,00</p>
+                            <p class="text-sm text-gray-500">Soma de todas as despesas a pagar.</p>
+                        </div>
+                        <!-- Ícone de relógio para pendente -->
+                        <i class="fa-solid fa-clock-rotate-left text-3xl text-yellow-600"></i>
                     </div>
 
                     <!-- Card Total Guardado (Caixinhas) - Agora ligado às caixinhas reais -->
@@ -633,3 +644,5 @@
 
 </body>
 </html>
+
+    
