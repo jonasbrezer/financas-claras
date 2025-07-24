@@ -60,48 +60,55 @@
                 <h2 class="text-3xl font-bold mb-2 text-[var(--color-heading-green)]">Visão Geral</h2>
                 <p class="text-gray-600 text-lg mb-6">Seu resumo financeiro rápido.</p>
 
-                <!-- Cards de Resumo da Visão Geral -->
+                <!-- Cards de Resumo (MOVIMENTE OS CARDS DE TRANSAÇÕES PARA CÁ) -->
                 <div class="space-y-4 mb-8">
                     <!-- Card Saldo Atual -->
                     <div class="bg-white p-5 rounded-lg shadow-md flex items-center justify-between">
                         <div>
                             <p class="text-base text-gray-600">Saldo Atual</p>
                             <p class="font-bold text-3xl text-[var(--color-blue-primary)]" id="dashboard-current-balance">R$ 0,00</p>
-                            <p class="text-sm text-gray-500">Seu dinheiro disponível.</p>
+                            <p class="text-sm text-gray-500">Receitas - Despesas Pagas</p>
                         </div>
-                        <!-- Ícone de carteira -->
                         <i class="fa-solid fa-wallet text-3xl"></i>
                     </div>
 
-                    <!-- Card Receitas do Mês -->
+                    <!-- Card Despesas Pagas -->
                     <div class="bg-white p-5 rounded-lg shadow-md flex items-center justify-between">
                         <div>
-                            <p class="text-base text-gray-600">Receitas do Mês</p>
-                            <p class="font-bold text-3xl text-[var(--color-green-positive)]" id="dashboard-monthly-income">R$ 0,00</p>
-                            <p class="text-sm text-gray-500">Total de entradas no mês.</p>
+                            <p class="text-base text-gray-600">Despesas Pagas</p>
+                            <p class="font-bold text-3xl text-[var(--color-red-negative)]" id="dashboard-paid-expenses">R$ 0,00</p>
+                            <p class="text-sm text-gray-500">Soma de todas as despesas pagas.</p>
                         </div>
-                        <!-- Ícone de seta para cima para receitas -->
-                        <i class="fa-solid fa-arrow-trend-up text-3xl"></i>
+                        <i class="fa-solid fa-circle-check text-3xl text-green-500"></i>
                     </div>
 
-                    <!-- Card Despesas do Mês -->
+                    <!-- Card Despesas Pendentes -->
                     <div class="bg-white p-5 rounded-lg shadow-md flex items-center justify-between">
                         <div>
-                            <p class="text-base text-gray-600">Despesas do Mês</p>
-                            <p class="font-bold text-3xl text-[var(--color-red-negative)]" id="dashboard-monthly-expenses">R$ 0,00</p>
-                            <p class="text-sm text-gray-500">Total de saídas no mês.</p>
+                            <p class="text-base text-gray-600">Despesas Pendentes</p>
+                            <p class="font-bold text-3xl text-yellow-600" id="dashboard-pending-expenses">R$ 0,00</p>
+                            <p class="text-sm text-gray-500">Soma de todas as despesas a pagar.</p>
                         </div>
-                        <!-- Ícone de seta para baixo para despesas -->
-                        <i class="fa-solid fa-arrow-trend-down text-3xl"></i>
+                        <i class="fa-solid fa-clock-rotate-left text-3xl text-yellow-600"></i>
+                    </div>
+
+                    <!-- Card Total Guardado (Caixinhas) -->
+                    <div class="bg-white p-5 rounded-lg shadow-md flex items-center justify-between">
+                        <div>
+                            <p class="text-base text-gray-600">Total Guardado (Caixinhas)</p>
+                            <p class="font-bold text-3xl text-[var(--color-blue-primary)]" id="dashboard-total-caixinhas-saved">R$ 0,00</p>
+                            <p class="text-sm text-gray-500">Soma do valor atual das suas caixinhas</p>
+                        </div>
+                        <i class="fa-solid fa-piggy-bank text-3xl"></i>
                     </div>
                 </div>
 
-                <!-- Novo botão para Insights Financeiros -->
+                <!-- Botão para Insights Financeiros -->
                 <button id="generate-insights-button" class="w-full sm:w-auto px-6 py-3 bg-yellow-500 text-white font-medium rounded-lg hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition duration-300 shadow-md mb-8">
                     ✨ Gerar Insights Financeiros
                 </button>
 
-                <!-- EM #dashboard, SUBSTITUA O PLACEHOLDER DE GRÁFICO POR ISTO -->
+                <!-- Gráfico -->
                 <div class="bg-white p-6 rounded-lg shadow-md">
                     <h3 class="text-xl font-semibold mb-4">Despesas do Mês por Categoria</h3>
                     <div class="h-64 md:h-80">
@@ -115,52 +122,7 @@
                 <h2 class="text-3xl font-bold mb-2 text-[var(--color-heading-green)]">Transações</h2>
                 <p class="text-gray-600 text-lg mb-6">Suas movimentações e resumo financeiro.</p>
 
-                <!-- Cards de Resumo de Transações -->
-                <div class="space-y-4 mb-8">
-                    <!-- Card Saldo Atual (agora calculado dinamicamente) -->
-                    <div class="bg-white p-5 rounded-lg shadow-md flex items-center justify-between">
-                        <div>
-                            <p class="text-base text-gray-600">Saldo Atual</p>
-                            <p class="font-bold text-3xl text-[var(--color-blue-primary)]" id="transactions-current-balance">R$ 0,00</p>
-                            <p class="text-sm text-gray-500">Receitas - Despesas Pagas</p>
-                        </div>
-                        <!-- Ícone de carteira -->
-                        <i class="fa-solid fa-wallet text-3xl"></i>
-                    </div>
-
-                    <!-- Card Despesas Pagas (antigo "Total de Despesas") -->
-                    <div class="bg-white p-5 rounded-lg shadow-md flex items-center justify-between">
-                        <div>
-                            <p class="text-base text-gray-600">Despesas Pagas</p>
-                            <p class="font-bold text-3xl text-[var(--color-red-negative)]" id="transactions-paid-expenses">R$ 0,00</p>
-                            <p class="text-sm text-gray-500">Soma de todas as despesas pagas.</p>
-                        </div>
-                        <!-- Ícone de seta para baixo ou similar para despesas -->
-                        <i class="fa-solid fa-circle-check text-3xl text-green-500"></i>
-                    </div>
-
-                    <!-- NOVO Card Despesas Pendentes -->
-                    <div class="bg-white p-5 rounded-lg shadow-md flex items-center justify-between">
-                        <div>
-                            <p class="text-base text-gray-600">Despesas Pendentes</p>
-                            <p class="font-bold text-3xl text-yellow-600" id="transactions-pending-expenses">R$ 0,00</p>
-                            <p class="text-sm text-gray-500">Soma de todas as despesas a pagar.</p>
-                        </div>
-                        <!-- Ícone de relógio para pendente -->
-                        <i class="fa-solid fa-clock-rotate-left text-3xl text-yellow-600"></i>
-                    </div>
-
-                    <!-- Card Total Guardado (Caixinhas) - Agora ligado às caixinhas reais -->
-                    <div class="bg-white p-5 rounded-lg shadow-md flex items-center justify-between">
-                        <div>
-                            <p class="text-base text-gray-600">Total Guardado (Caixinhas)</p>
-                            <p class="font-bold text-3xl text-[var(--color-blue-primary)]" id="transactions-total-caixinhas-saved">R$ 0,00</p>
-                            <p class="text-sm text-gray-500">Soma do valor atual das suas caixinhas</p>
-                        </div>
-                        <!-- Ícone de cofrinho -->
-                        <i class="fa-solid fa-piggy-bank text-3xl"></i>
-                    </div>
-                </div>
+                <!-- Cards de Resumo de Transações (REMOVIDOS, MOVIDOS PARA VISÃO GERAL) -->
 
                 <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4 mb-8">
                     <button id="add-new-transaction-button" class="w-full sm:w-auto px-6 py-3 bg-[var(--color-blue-primary)] text-white font-medium rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-blue-primary)] transition duration-300 shadow-md">
@@ -168,18 +130,48 @@
                     </button>
                 </div>
 
-                <!-- NOVO: Navegação por Mês -->
+                <!-- Navegação por Mês -->
                 <div class="flex items-center justify-between bg-white p-4 rounded-lg shadow-sm mb-6">
-                    <button id="prev-month-button" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">
-                        <i class="fa-solid fa-chevron-left"></i> Mês Anterior
+                    <button id="prev-month-button" class="px-3 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 flex items-center space-x-2">
+                        <i class="fa-solid fa-chevron-left"></i>
+                        <span class="hidden sm:inline">Mês Anterior</span>
                     </button>
-                    <span id="current-month-display" class="font-semibold text-lg"></span>
-                    <button id="next-month-button" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300">
-                        Próximo Mês <i class="fa-solid fa-chevron-right"></i>
+                    <span id="current-month-display" class="font-semibold text-lg text-center mx-4 flex-shrink-0"></span>
+                    <button id="next-month-button" class="px-3 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 flex items-center space-x-2">
+                        <span class="hidden sm:inline">Próximo Mês</span>
+                        <i class="fa-solid fa-chevron-right"></i>
                     </button>
                 </div>
 
-                <!-- Lista de Transações - Agrupadas por Data (agora dinâmicas) -->
+                <!-- Seção de Filtros de Transações (DESIGN MELHORADO) -->
+                <div id="transaction-filters" class="bg-white p-4 rounded-lg shadow-sm mb-6 flex flex-col md:flex-row md:items-center gap-4">
+                    <h3 class="text-lg font-semibold text-gray-800 md:mb-0">Filtrar por:</h3>
+                    <div class="flex-grow grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        <select id="filter-type" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]">
+                            <option value="all">Todos os Tipos</option>
+                            <option value="income">Receitas</option>
+                            <option value="expense">Despesas</option>
+                            <option value="caixinha">Mov. de Caixinha</option>
+                        </select>
+                        <select id="filter-category" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]">
+                            <option value="all">Todas as Categorias</option>
+                            <!-- Categorias serão populadas pelo JS -->
+                        </select>
+                        <select id="filter-status" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]">
+                            <option value="all">Todos os Status</option>
+                            <option value="Pago">Pago</option>
+                            <option value="Recebido">Recebido</option>
+                            <option value="Pendente">Pendente</option>
+                            <option value="Confirmado">Confirmado</option>
+                        </select>
+                    </div>
+                    <button id="reset-filters-button" class="w-full md:w-auto px-4 py-2 bg-gray-600 text-white font-medium rounded-lg hover:bg-gray-700 transition duration-300">
+                        Limpar Filtros
+                    </button>
+                </div>
+
+
+                <!-- Lista de Transações - Agrupadas por Data -->
                 <div id="transactions-list-container" class="relative">
                     <!-- Linha do tempo vertical sutil -->
                     <div class="absolute left-3 top-0 bottom-0 w-0.5 bg-gray-200"></div>
@@ -190,15 +182,19 @@
 
             <!-- Chat com IA (Assistente) -->
             <section id="chat" class="page-section">
-                <h2 class="text-3xl font-bold mb-6 text-gray-900 flex items-center">
-                    <span>Assistente IA</span>
-                    <!-- NOVO: Indicador da chave de API ativa -->
-                    <span id="active-api-key-indicator" class="ml-2 text-sm font-mono bg-gray-200 text-gray-600 px-2 py-0.5 rounded-md hidden"></span>
-                </h2>
-                <div class="bg-white p-6 rounded-lg shadow-md flex flex-col flex-grow min-h-[300px] relative">
+                <!-- O conteúdo do chat foi movido para um container interno para melhor controle do layout -->
+                <div id="chat-container" class="bg-white rounded-lg shadow-md flex flex-col h-full">
+                    <div class="p-4 border-b flex items-center">
+                        <!-- NOVO: Botão Voltar (apenas mobile) -->
+                        <button id="chat-back-button" class="md:hidden mr-4 p-2 rounded-full hover:bg-gray-100">
+                            <i class="fa-solid fa-arrow-left text-lg"></i>
+                        </button>
+                        <h2 class="text-2xl font-bold text-gray-900 flex-grow">Assistente IA</h2>
+                        <span id="active-api-key-indicator" class="text-sm font-mono bg-gray-200 text-gray-600 px-2 py-0.5 rounded-md hidden"></span>
+                    </div>
+
                     <!-- Área de Mensagens -->
-                    <!-- Adicionado 'pb-20' para que o conteúdo não seja escondido pela caixa de entrada fixa -->
-                    <div id="chat-messages" class="flex-grow overflow-y-auto p-4 space-y-4 pb-20">
+                    <div id="chat-messages" class="flex-grow overflow-y-auto p-4 space-y-4">
                         <!-- Mensagem da IA de introdução -->
                         <div class="flex justify-start">
                             <div class="bg-gray-100 text-gray-800 p-3 rounded-xl rounded-bl-none max-w-xs md:max-w-md shadow-sm">
@@ -206,23 +202,24 @@
                             </div>
                         </div>
                     </div>
+
                     <!-- Indicador de Carregamento -->
                     <div id="chat-loading-indicator" class="text-center text-gray-500 py-2 hidden">
                         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
                         Pensando...
                     </div>
-                    <!-- Campo de Input de Texto e Botões (Fixo na parte inferior do contêiner do chat) -->
-                    <div class="absolute bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-200 flex items-center">
+
+                    <!-- Campo de Input de Texto e Botões -->
+                    <div id="chat-input-container" class="p-4 bg-white border-t border-gray-200 flex items-center">
                         <button id="clear-chat-button" class="bg-gray-200 text-gray-600 p-3 rounded-full shadow-md hover:bg-gray-300 transition duration-300 mr-2">
-                            <i class="fa-solid fa-trash-can text-lg"></i> <!-- Ícone de Lixeira -->
+                            <i class="fa-solid fa-trash-can text-lg"></i>
                         </button>
                         <button id="refresh-chat-data-button" class="bg-gray-200 text-gray-600 p-3 rounded-full shadow-md hover:bg-gray-300 transition duration-300 mr-2">
-                            <i class="fa-solid fa-arrows-rotate text-lg"></i> <!-- Ícone de Atualizar -->
+                            <i class="fa-solid fa-arrows-rotate text-lg"></i>
                         </button>
                         <input type="text" id="chat-input" placeholder="Assistente não configurado..." 
                                class="flex-grow min-w-0 p-3 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]" disabled>
                         <button id="chat-send-button" class="px-6 py-3 bg-[var(--color-blue-primary)] text-white font-medium rounded-r-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-blue-primary)] transition duration-300" disabled>
-                            <!-- Ícone de Enviar -->
                             <i class="fa-solid fa-paper-plane"></i>
                         </button>
                     </div>
@@ -436,7 +433,6 @@
                         Salvar Categoria
                     </button>
                 </div>
-                <div id="category-save-status-message" class="mt-4 text-sm font-medium hidden"></div>
             </form>
         </div>
     </div>
@@ -660,10 +656,9 @@
         </div>
     </div>
 
-    <!-- Botão "Voltar ao Topo" -->
-    <button id="back-to-top-button" class="fixed bottom-24 md:bottom-8 right-4 bg-[var(--color-blue-primary)] text-white w-12 h-12 rounded-full shadow-lg hover:bg-blue-600 z-50 flex items-center justify-center">
-        <i class="fa-solid fa-arrow-up text-xl"></i>
-    </button>
+    <!-- Toast Notification Container -->
+    <div id="toast-container" class="fixed bottom-5 right-5 z-[1002] space-y-2"></div>
+
 
     <script type="module" src="script.js"></script>
 
