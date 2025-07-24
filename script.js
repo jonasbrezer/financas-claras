@@ -111,6 +111,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const loginPasswordInput = document.getElementById('login-password');
     const loginErrorMessage = document.getElementById('login-error-message');
     const appContent = document.getElementById('app-content');
+    const bodyEl = document.querySelector('body');
 
     // Elementos do Modal de Confirmação Genérico
     const confirmationModal = document.getElementById('confirmation-modal');
@@ -177,7 +178,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // 3. Salvar a transação
         await saveTransaction(newTransaction);
-        console.log("Transação da IA salva com sucesso:", newTransaction);
+        showToast("Transação adicionada pela IA com sucesso!", "success");
         return `Sucesso: A transação "${description}" de ${formatCurrency(amount)} foi adicionada com sucesso.`;
     };
 
@@ -211,6 +212,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const refreshChatDataButton = document.getElementById('refresh-chat-data-button');
     const clearChatButton = document.getElementById('clear-chat-button');
     const activeApiKeyIndicator = document.getElementById('active-api-key-indicator');
+    const chatBackButton = document.getElementById('chat-back-button'); // NOVO: Botão Voltar
 
     // Elementos das Categorias
     const addCategoryButton = document.getElementById('add-new-category-button');
@@ -226,7 +228,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const priorityField = document.getElementById('priority-field'); 
     const categoryPriorityRadios = document.querySelectorAll('input[name="category-priority"]'); 
     const categorySearchInput = document.getElementById('category-search-input');
-    const categorySaveStatusMessage = document.getElementById('category-save-status-message');
     // NOVO: Elementos para o campo de Valor Alvo da Categoria/Caixinha
     const targetAmountField = document.getElementById('target-amount-field');
     const categoryTargetAmountInput = document.getElementById('category-target-amount');
@@ -256,6 +257,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     const prevMonthButton = document.getElementById('prev-month-button');
     const nextMonthButton = document.getElementById('next-month-button');
     const currentMonthDisplay = document.getElementById('current-month-display');
+    // NOVO: Elementos de Filtro de Transações
+    const filterTypeSelect = document.getElementById('filter-type');
+    const filterCategorySelect = document.getElementById('filter-category');
+    const filterStatusSelect = document.getElementById('filter-status');
+    const resetFiltersButton = document.getElementById('reset-filters-button');
+
 
 
     // NOVO: Variáveis de controle para o fluxo multi-etapas do modal de transação
@@ -269,16 +276,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     ];
 
 
-    // Elementos do Dashboard
+    // Elementos do Dashboard (agora com os resumos principais)
     const dashboardCurrentBalance = document.getElementById('dashboard-current-balance');
-    const dashboardMonthlyIncome = document.getElementById('dashboard-monthly-income');
-    const dashboardMonthlyExpenses = document.getElementById('dashboard-monthly-expenses');
+    const dashboardPaidExpenses = document.getElementById('dashboard-paid-expenses');
+    const dashboardPendingExpenses = document.getElementById('dashboard-pending-expenses');
+    const dashboardTotalCaixinhasSaved = document.getElementById('dashboard-total-caixinhas-saved');
 
-    // Elementos da Seção de Transações (Resumo)
-    const transactionsCurrentBalance = document.getElementById('transactions-current-balance');
-    const transactionsPaidExpenses = document.getElementById('transactions-paid-expenses');
-    const transactionsPendingExpenses = document.getElementById('transactions-pending-expenses');
-    const transactionsTotalCaixinhasSaved = document.getElementById('transactions-total-caixinhas-saved'); 
+    // Elementos da Seção de Transações (Resumo) - IDs não mais usados, pois foram movidos
+    // const transactionsCurrentBalance = document.getElementById('transactions-current-balance');
+    // ...etc
 
     // Elementos do Orçamento
     const configureBudgetButton = document.getElementById('configure-budget-button'); 
@@ -378,6 +384,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 renderCategories(categorySearchInput.value);
                 updateDashboardAndTransactionSummaries(); // Atualiza os resumos após carregar categorias
                 renderExpenseChart(); // Adicionar chamada para o gráfico
+                populateFilterCategories(); // ATUALIZADO: Popula o filtro de categorias
             } else { // Se não existir ou estiver vazio, inicializa como array vazio
                 categories = [];
                 console.log("Categorias e Caixinhas não encontradas ou vazias, inicializando como array vazio.");
@@ -385,6 +392,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 renderCategories(categorySearchInput.value);
                 updateDashboardAndTransactionSummaries();
                 renderExpenseChart(); // Adicionar chamada para o gráfico
+                populateFilterCategories(); // ATUALIZADO: Popula o filtro de categorias
             }
         }, (error) => {
             console.error("Erro ao carregar Categorias do Firestore:", error);
@@ -473,12 +481,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             };
             if (aiConfigRef) {
                 await setDoc(aiConfigRef, dataToSave, { merge: true }); // Usar merge para não sobrescrever
-                showAiConfigSaveStatus();
+                showToast("Configurações da IA salvas com sucesso!", "success");
                 console.log("Configurações da IA salvas.");
             }
         } catch (error) {
             console.error("Erro ao salvar AI Config:", error);
-            // Não exibe mensagem de erro na UI para auto-save, apenas no console
+            showToast(`Erro ao salvar configurações da IA: ${error.message}`, "error");
         }
     }
 
@@ -487,7 +495,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     async function saveCategories() {
         if (!isAuthReady || !userId) { 
             console.warn("saveCategories: Autenticação não pronta ou userId ausente. Tentando salvar localmente por agora.");
-            displayCategorySaveStatus('Erro: Autenticação não pronta para salvar no banco.', 'error');
+            showToast('Erro: Autenticação não pronta para salvar no banco.', 'error');
             return; 
         }
         try {
@@ -495,11 +503,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (userCategoriesRef) {
                 await setDoc(userCategoriesRef, { items: categories || [] }); 
                 console.log("saveCategories: Categorias e Caixinhas salvas com sucesso no Firestore!");
-                displayCategorySaveStatus('Categoria/Caixinha salva com sucesso! &#x1F389;', 'success');
             }
         } catch (error) {
             console.error("saveCategories: Erro ao salvar Categorias no Firestore:", error);
-            displayCategorySaveStatus(`Erro ao salvar: ${error.message}`, 'error');
+            showToast(`Erro ao salvar categoria: ${error.message}`, 'error');
         }
     }
 
@@ -545,6 +552,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.log("Transação(ões) salva(s) com sucesso!");
         } catch (error) {
             console.error("Erro ao salvar Transação(ões):", error);
+            showToast(`Erro ao salvar transação: ${error.message}`, 'error');
         }
     }
 
@@ -567,8 +575,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 console.log(`Deletando transação individual: ${id}`);
             }
             await batch.commit();
+            showToast("Transação(ões) deletada(s) com sucesso.", "success");
         } catch (error) {
             console.error("Erro ao deletar Transação(ões):", error);
+            showToast(`Erro ao deletar transação: ${error.message}`, 'error');
         }
     }
 
@@ -578,10 +588,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             const userBudgetsRef = getUserDocumentRef('budgets', 'userBudgets');
             if (userBudgetsRef) {
-                await setDoc(userBudgetsRef, { items: budgets || [] }); 
+                await setDoc(userBudgetsRef, { items: budgets || [] });
+                showToast("Orçamento salvo com sucesso!", "success");
             }
         } catch (error) {
             console.error("Erro ao salvar Orçamentos:", error);
+            showToast(`Erro ao salvar orçamento: ${error.message}`, "error");
         }
     }
 
@@ -604,7 +616,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (apiKeyRef) {
                 await setDoc(apiKeyRef, { keys: keysToSave });
                 geminiApiKeys = keysToSave; // Atualiza o array local
-                updateApiModalStatus("Chaves de API salvas com sucesso! &#x1F389;", "success");
+                updateApiModalStatus("Chaves de API salvas com sucesso!", "success");
                 isGeminiApiReady = geminiApiKeys.some(key => key.trim() !== '');
                 updateChatUIState();
                 console.log("Chaves de API Gemini salvas no Firestore.");
@@ -645,7 +657,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Ações específicas ao carregar cada página
         if (pageId === 'chat') {
             chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
-        } else if (pageId === 'categories-management') {
+            bodyEl.classList.add('chat-active');
+        } else {
+            bodyEl.classList.remove('chat-active');
+        }
+        
+        if (pageId === 'categories-management') {
             renderCategories();
         } else if (pageId === 'transactions') {
             // Ao entrar na página de transações, garante que o mês atual seja exibido
@@ -707,19 +724,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Atualiza Dashboard
         dashboardCurrentBalance.textContent = formatCurrency(currentBalance);
-        dashboardMonthlyIncome.textContent = formatCurrency(totalIncome);
-        dashboardMonthlyExpenses.textContent = formatCurrency(totalPaidExpenses);
-
-        // Atualiza Resumo em Transações
-        transactionsCurrentBalance.textContent = formatCurrency(currentBalance);
-        transactionsPaidExpenses.textContent = formatCurrency(totalPaidExpenses);
-        transactionsPendingExpenses.textContent = formatCurrency(totalPendingExpenses);
-
+        dashboardPaidExpenses.textContent = formatCurrency(totalPaidExpenses);
+        dashboardPendingExpenses.textContent = formatCurrency(totalPendingExpenses);
+        
         // Atualiza Total Guardado (Caixinhas) - Agora filtra das categorias
         let totalCaixinhasSaved = categories
             .filter(cat => cat.type === 'caixinha')
             .reduce((sum, caixinha) => sum + parseFloat(caixinha.savedAmount || 0), 0); 
-        transactionsTotalCaixinhasSaved.textContent = formatCurrency(totalCaixinhasSaved); 
+        dashboardTotalCaixinhasSaved.textContent = formatCurrency(totalCaixinhasSaved); 
     }
 
 
@@ -781,18 +793,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         filteredCategories.forEach(category => {
             const categoryItem = document.createElement('div');
-            categoryItem.className = 'bg-white p-4 rounded-lg shadow-sm flex items-center justify-between';
+            categoryItem.className = 'bg-white p-4 rounded-lg shadow-sm flex items-start justify-between';
             
             let typeDisplay = '';
             let priorityDisplay = '';
-            let savedAmountDisplay = '';
-            let progressHtml = '';
+            let detailsHtml = '';
 
             if (category.type === 'income') {
                 typeDisplay = 'Receita';
+                detailsHtml = `<p class="text-sm text-gray-500">${typeDisplay}</p>`;
             } else if (category.type === 'expense') {
                 typeDisplay = 'Despesa';
-                priorityDisplay = category.priority ? ` (${category.priority === 'essential' ? 'Essencial' : 'Não Essencial'})` : '';
+                priorityDisplay = category.priority ? (category.priority === 'essential' ? 'Essencial' : 'Não Essencial') : '';
+                detailsHtml = `<p class="text-sm text-gray-500">${typeDisplay} &bull; ${priorityDisplay}</p>`;
             } else if (category.type === 'caixinha') {
                 typeDisplay = 'Caixinha';
                 const saved = parseFloat(category.savedAmount || 0);
@@ -800,31 +813,34 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const progress = (target > 0) ? (saved / target) * 100 : 0;
                 const progressBarColor = progress >= 100 ? 'bg-green-500' : (progress > 50 ? 'bg-blue-500' : 'bg-yellow-500');
 
-                savedAmountDisplay = ` - Guardado: ${formatCurrency(saved)} / Alvo: ${formatCurrency(target)}`;
-                progressHtml = `
+                detailsHtml = `
+                    <p class="text-sm text-gray-500">${typeDisplay}</p>
+                    <p class="text-sm text-gray-600 mt-1">
+                        <span class="font-medium">${formatCurrency(saved)}</span> de ${formatCurrency(target)}
+                    </p>
                     <div class="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700 mt-2">
                         <div class="${progressBarColor} h-2.5 rounded-full" style="width: ${Math.min(100, progress)}%"></div>
                     </div>
-                    <p class="text-xs text-gray-500 mt-1">${progress.toFixed(0)}% Concluído</p>
+                    <p class="text-xs text-gray-500 mt-1 text-right">${progress.toFixed(0)}% Concluído</p>
                 `;
             }
 
             categoryItem.innerHTML = `
-                <div class="flex items-center">
-                    <div class="w-6 h-6 rounded-full mr-3" style="background-color: ${category.color};"></div>
-                    <div>
-                        <p class="font-medium text-lg">${category.name}</p>
-                        <p class="text-sm text-gray-500">${typeDisplay}${priorityDisplay}${savedAmountDisplay}</p>
-                        ${progressHtml}
+                <div class="flex items-start flex-grow">
+                    <div class="w-4 h-4 rounded-full mr-4 mt-1" style="background-color: ${category.color};"></div>
+                    <div class="flex-grow">
+                        <p class="font-semibold text-lg text-gray-800">${category.name}</p>
+                        ${detailsHtml}
                     </div>
                 </div>
-                <div class="flex items-center space-x-2">
-                    <button class="text-gray-500 hover:text-blue-500 p-1 rounded-full edit-category-button" data-id="${category.id}">
-                        <i class="fa-solid fa-pen-to-square text-lg"></i>
+                <div class="relative">
+                    <button class="action-menu-button p-2 rounded-full hover:bg-gray-100" data-id="${category.id}">
+                        <i class="fa-solid fa-ellipsis-vertical text-gray-500"></i>
                     </button>
-                    <button class="text-gray-500 hover:text-red-500 p-1 rounded-full delete-category-button" data-id="${category.id}">
-                        <i class="fa-solid fa-trash-can text-lg"></i>
-                    </button>
+                    <div class="action-menu-dropdown hidden">
+                        <a href="#" class="edit-category-button" data-id="${category.id}">Editar</a>
+                        <a href="#" class="delete-category-button" data-id="${category.id}">Apagar</a>
+                    </div>
                 </div>
             `;
             categoryListContainer.appendChild(categoryItem);
@@ -834,7 +850,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Abre o modal de categoria (agora também para caixinhas)
     function openCategoryModal(category = null) {
         categoryModal.classList.add('active');
-        categorySaveStatusMessage.classList.add('hidden');
         categoryForm.reset(); // Limpa o formulário
         categoryTargetAmountInput.value = ''; // Limpa o campo de valor alvo
 
@@ -876,23 +891,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     function closeCategoryModal() {
         categoryModal.classList.remove('active');
         categoryForm.reset();
-        categorySaveStatusMessage.classList.add('hidden');
-    }
-
-    // Exibe mensagem de status para salvar categoria
-    function displayCategorySaveStatus(message, type = 'info') {
-        categorySaveStatusMessage.textContent = message;
-        categorySaveStatusMessage.classList.remove('hidden', 'text-green-700', 'text-red-700', 'text-blue-700');
-        if (type === 'success') {
-            categorySaveStatusMessage.classList.add('text-green-700');
-        } else if (type === 'error') {
-            categorySaveStatusMessage.classList.add('text-red-700');
-        } else {
-            categorySaveStatusMessage.classList.add('text-blue-700');
-        }
-        setTimeout(() => {
-            categorySaveStatusMessage.classList.add('hidden');
-        }, 3000);
     }
 
     // Lida com o envio do formulário de categoria
@@ -903,7 +901,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const type = document.querySelector('input[name="category-type"]:checked').value;
         
         if (!name) {
-            displayCategorySaveStatus('O nome da categoria é obrigatório!', 'error');
+            showToast('O nome da categoria é obrigatório!', 'error');
             return;
         }
         
@@ -963,6 +961,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             categories.push(newCategory);
         }
         await saveCategories();
+        showToast('Categoria salva com sucesso!', 'success');
         
         if(transactionModal.classList.contains('active')) {
             // populateTransactionCategories(document.querySelector('input[name="transaction-type"]:checked').value); // Removido, a lógica de populate é no goToStep(2)
@@ -972,6 +971,20 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Lida com cliques nos botões de editar/excluir categorias (delegação de eventos)
     categoryListContainer.addEventListener('click', (e) => {
+        // Lógica para o menu de 3 pontos
+        const menuButton = e.target.closest('.action-menu-button');
+        if (menuButton) {
+            e.stopPropagation(); 
+            const dropdown = menuButton.nextElementSibling;
+            document.querySelectorAll('.action-menu-dropdown').forEach(openDropdown => {
+                if (openDropdown !== dropdown) {
+                    openDropdown.classList.add('hidden');
+                }
+            });
+            dropdown.classList.toggle('hidden');
+            return;
+        }
+
         if (e.target.closest('.edit-category-button')) {
             const id = e.target.closest('.edit-category-button').dataset.id;
             const categoryToEdit = categories.find(cat => cat.id === id);
@@ -995,9 +1008,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         await saveTransaction(t);
                     }
                     await saveCategories();
-                    // if(transactionModal.classList.contains('active')) { // Removido, a lógica de populate é no goToStep(2)
-                    //     populateTransactionCategories(document.querySelector('input[name="transaction-type"]:checked').value);
-                    // }
+                    showToast("Categoria deletada.", "info");
                     updateDashboardAndTransactionSummaries();
                 }
             );
@@ -1062,15 +1073,28 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const currentMonthYYYYMM = getCurrentMonthYYYYMM(currentMonth);
 
-        // Filtra as transações para exibir apenas as do mês atual
-        const transactionsInMonth = transactions.filter(t => t.date.startsWith(currentMonthYYYYMM));
+        // APLICA FILTROS (NOVO)
+        const typeFilter = filterTypeSelect.value;
+        const categoryFilter = filterCategorySelect.value;
+        const statusFilter = filterStatusSelect.value;
 
-        if (transactionsInMonth.length === 0) {
-            transactionsListContainer.innerHTML += '<p class="text-center text-gray-500 py-4" id="no-transactions-message">Nenhuma transação cadastrada para este mês.</p>';
+        const filteredTransactions = transactions.filter(t => {
+            const transactionMonth = t.date.substring(0, 7);
+            if (transactionMonth !== currentMonthYYYYMM) return false;
+            
+            if (typeFilter !== 'all' && t.type !== typeFilter) return false;
+            if (categoryFilter !== 'all' && t.categoryId !== categoryFilter) return false;
+            if (statusFilter !== 'all' && t.status !== statusFilter) return false;
+            
+            return true;
+        });
+
+        if (filteredTransactions.length === 0) {
+            transactionsListContainer.innerHTML += '<p class="text-center text-gray-500 py-4" id="no-transactions-message">Nenhuma transação encontrada para os filtros selecionados.</p>';
             return;
         }
 
-        const groupedTransactions = transactionsInMonth.reduce((acc, transaction) => {
+        const groupedTransactions = filteredTransactions.reduce((acc, transaction) => {
             const date = transaction.date;
             if (!acc[date]) {
                 acc[date] = [];
@@ -1114,83 +1138,64 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (category) {
                     categoryName = category.name;
                     bulletColor = category.color;
-                    transactionTypeDisplay = category.type;
                 } else {
-                    // Fallback for unknown categories, e.g., after deletion
                     categoryName = 'Categoria Desconhecida';
                     bulletColor = '#9E9E9E';
-                    transactionTypeDisplay = transaction.type; // Use transaction's own type if category not found
                 }
 
                 if (transaction.type === 'income') {
                     amountColorClass = 'text-[var(--color-green-positive)]';
                     amountPrefix = '+';
+                    transactionTypeDisplay = categoryName;
                 } else if (transaction.type === 'expense') {
                     amountColorClass = 'text-[var(--color-red-negative)]';
                     amountPrefix = '-';
+                    transactionTypeDisplay = categoryName;
                 } else if (transaction.type === 'caixinha') {
                     if (transaction.transactionType === 'deposit') {
-                        amountColorClass = 'text-[var(--color-red-negative)]'; // Saída do saldo principal
-                        amountPrefix = '-';
-                        categoryName = `Depósito: ${categoryName}`;
+                        amountColorClass = 'text-blue-600'; // Cor azul para depósito
+                        amountPrefix = '→'; // Seta para indicar movimento
+                        transactionTypeDisplay = `Depósito em: ${categoryName}`;
                     } else if (transaction.transactionType === 'withdraw') {
-                        amountColorClass = 'text-[var(--color-green-positive)]'; // Entrada no saldo principal
-                        amountPrefix = '+';
-                        categoryName = `Resgate: ${categoryName}`;
+                        amountColorClass = 'text-indigo-600'; // Cor índigo para resgate
+                        amountPrefix = '←'; // Seta para indicar movimento
+                        transactionTypeDisplay = `Resgate de: ${categoryName}`;
                     }
                 }
                 
-                // Determina se a bolinha deve ser preenchida ou vazada
                 const isPaidOrReceived = (transaction.status === 'Pago' || transaction.status === 'Recebido' || transaction.status === 'Confirmado');
                 const bulletClass = isPaidOrReceived ? 'transaction-bullet paid' : 'transaction-bullet';
                 const bulletStyle = isPaidOrReceived ? `background-color: ${bulletColor};` : `border: 3px solid ${bulletColor};`;
                 
-                // NOVO: Status indicator em nova linha, menor e mais suave
                 const statusIndicatorText = transaction.status === 'Pendente' ? 'Pendente' : 
                                             (transaction.type === 'income' && transaction.status === 'Recebido' ? 'Recebido' : 
                                             (transaction.type === 'expense' && transaction.status === 'Pago' ? 'Pago' : 
-                                            (transaction.type === 'caixinha' && transaction.transactionType === 'deposit' && transaction.status === 'Confirmado' ? 'Guardado' : 
-                                            (transaction.type === 'caixinha' && transaction.transactionType === 'withdraw' && transaction.status === 'Confirmado' ? 'Resgatado' : ''))));
+                                            (transaction.type === 'caixinha' && transaction.status === 'Confirmado' ? 'Confirmado' : '')));
                 const statusIndicatorHtml = statusIndicatorText ? `<p class="text-xs text-gray-500">${statusIndicatorText}</p>` : '';
 
-                // NOVO: Indicador de parcelamento
                 const installmentInfo = transaction.installmentNumber && transaction.totalInstallments ? 
                                         `<span class="text-xs text-gray-500 ml-2">(Parc. ${transaction.installmentNumber}/${transaction.totalInstallments})</span>` : '';
 
                 const transactionItem = document.createElement('div');
-                // Ajustado pl-12 para pl-8
                 transactionItem.className = `bg-white p-4 rounded-lg shadow-sm flex justify-between items-center relative pl-8`; 
                 transactionItem.innerHTML = `
                     <div class="${bulletClass}" style="${bulletStyle}"></div>
                     <div class="flex-grow min-w-0">
-                        <p class="font-medium truncate text-gray-800">${categoryName} ${installmentInfo}</p>
-                        ${statusIndicatorHtml} <!-- Status em nova linha -->
+                        <p class="font-medium truncate text-gray-800">${transactionTypeDisplay} ${installmentInfo}</p>
+                        ${statusIndicatorHtml}
                         <p class="text-sm text-gray-500 truncate">${transaction.description}</p>
                     </div>
                     <div class="flex items-center space-x-2 ml-4">
                         <p class="font-bold text-lg ${amountColorClass}">${amountPrefix} ${formatCurrency(transaction.amount)}</p>
-                        <!-- Menu de 3 pontos para Desktop -->
-                        <div class="relative hidden md:block">
-                            <button class="transaction-menu-button p-2 rounded-full hover:bg-gray-100" data-id="${transaction.id}">
+                        <div class="relative">
+                            <button class="action-menu-button p-2 rounded-full hover:bg-gray-100" data-id="${transaction.id}">
                                 <i class="fa-solid fa-ellipsis-vertical text-gray-500"></i>
                             </button>
-                            <div class="transaction-menu-dropdown absolute right-0 mt-2 w-40 bg-white rounded-md shadow-lg z-20 hidden">
-                                <a href="#" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 edit-transaction-button" data-id="${transaction.id}">Editar</a>
-                                <a href="#" class="block px-4 py-2 text-sm text-red-500 hover:bg-gray-100 delete-transaction-button" data-id="${transaction.id}">Apagar</a>
-                                ${transaction.recurrenceId ? `<a href="#" class="block px-4 py-2 text-sm text-red-500 hover:bg-gray-100 delete-recurrence-button" data-recurrence-id="${transaction.recurrenceId}">Apagar Todas as Parcelas</a>` : ''}
+                            <div class="action-menu-dropdown hidden">
+                                <a href="#" class="edit-transaction-button" data-id="${transaction.id}">Editar</a>
+                                <a href="#" class="delete-transaction-button" data-id="${transaction.id}">Apagar</a>
+                                ${transaction.recurrenceId ? `<a href="#" class="delete-recurrence-button" data-recurrence-id="${transaction.recurrenceId}">Apagar Recorrência</a>` : ''}
                             </div>
-                        </div>
-                        <!-- Botões para Mobile (visíveis por padrão, swipe seria uma melhoria futura) -->
-                        <div class="md:hidden flex space-x-1">
-                            <button class="text-gray-400 hover:text-blue-500 p-1 rounded-full edit-transaction-button" data-id="${transaction.id}">
-                                <i class="fa-solid fa-pen-to-square text-base"></i>
-                            </button>
-                            <button class="text-gray-400 hover:text-red-500 p-1 rounded-full delete-transaction-button" data-id="${transaction.id}">
-                                <i class="fa-solid fa-trash-can text-base"></i>
-                            </button>
-                            ${transaction.recurrenceId ? `<button class="text-gray-400 hover:text-red-500 p-1 rounded-full delete-recurrence-button" data-recurrence-id="${transaction.recurrenceId}">
-                                <i class="fa-solid fa-calendar-xmark text-base"></i>
-                            </button>` : ''}
                         </div>
                     </div>
                 `;
@@ -1198,12 +1203,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             });
             transactionsListContainer.appendChild(dateGroupDiv);
         });
-        if (transactionsInMonth.length > 0) {
-            noTransactionsMessage.classList.add('hidden');
-        } else {
-            noTransactionsMessage.classList.remove('hidden');
-            noTransactionsMessage.textContent = `Nenhuma transação cadastrada para ${formatMonthDisplay(currentMonth)}.`;
-        }
+        
     }
 
     // Função para atualizar as opções de status com botões de rádio
@@ -1429,24 +1429,23 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Salva a transação, passando o número de parcelas
         await saveTransaction(newTransaction, installments);
+        showToast("Transação salva com sucesso!", "success");
         closeTransactionModal();
     });
 
     // Lida com cliques nos botões de editar/excluir transações (delegação de eventos)
     transactionsListContainer.addEventListener('click', (e) => {
-        // Lógica para o menu de 3 pontos (desktop)
-        const menuButton = e.target.closest('.transaction-menu-button');
+        const menuButton = e.target.closest('.action-menu-button');
         if (menuButton) {
-            e.stopPropagation(); // Impede que o clique se propague e feche outros menus
+            e.stopPropagation(); 
             const dropdown = menuButton.nextElementSibling;
-            // Fecha outros dropdowns abertos
-            document.querySelectorAll('.transaction-menu-dropdown').forEach(openDropdown => {
+            document.querySelectorAll('.action-menu-dropdown').forEach(openDropdown => {
                 if (openDropdown !== dropdown) {
                     openDropdown.classList.add('hidden');
                 }
             });
             dropdown.classList.toggle('hidden');
-            return; // Sai da função para não acionar edit/delete diretamente
+            return;
         }
 
         if (e.target.closest('.edit-transaction-button')) {
@@ -1476,7 +1475,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     await deleteTransactionFromFirestore(id);
                 }
             );
-        } else if (e.target.closest('.delete-recurrence-button')) { // NOVO: Listener para excluir recorrência
+        } else if (e.target.closest('.delete-recurrence-button')) { 
             const recurrenceId = e.target.closest('.delete-recurrence-button').dataset.recurrenceId;
             showConfirmationModal(
                 "Confirmar Exclusão de Parcelas",
@@ -1503,14 +1502,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // Fecha dropdowns de transação ao clicar fora
-    document.addEventListener('click', (e) => {
-        if (!e.target.closest('.transaction-menu-button') && !e.target.closest('.transaction-menu-dropdown')) {
-            document.querySelectorAll('.transaction-menu-dropdown').forEach(dropdown => {
-                dropdown.classList.add('hidden');
-            });
-        }
-    });
 
     // Listener para formatar o input de valor da transação
     transactionAmountInput.addEventListener('input', () => {
@@ -1720,10 +1711,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Adicionar Resumo Financeiro Principal
         dataString += "<strong>Resumo Financeiro Principal:</strong><br>";
-        dataString += `- Saldo Atual: ${transactionsCurrentBalance.textContent}<br>`;
-        dataString += `- Total de Despesas Pagas: ${transactionsPaidExpenses.textContent}<br>`;
-        dataString += `- Total de Despesas Pendentes: ${transactionsPendingExpenses.textContent}<br>`;
-        dataString += `- Total Guardado (Caixinhas): ${transactionsTotalCaixinhasSaved.textContent}<br><br>`;
+        dataString += `- Saldo Atual: ${dashboardCurrentBalance.textContent}<br>`;
+        dataString += `- Total de Despesas Pagas: ${dashboardPaidExpenses.textContent}<br>`;
+        dataString += `- Total de Despesas Pendentes: ${dashboardPendingExpenses.textContent}<br>`;
+        dataString += `- Total Guardado (Caixinhas): ${dashboardTotalCaixinhasSaved.textContent}<br><br>`;
 
         // Adicionar Categorias e Caixinhas
         dataString += "<strong>Categorias e Caixinhas Cadastradas:</strong><br><br>";
@@ -2344,6 +2335,13 @@ Ser o cérebro financeiro do usuário — confiável, atento, útil, direto e ad
         });
     }
 
+    // NOVO: Event listener para o botão de voltar do chat
+    if (chatBackButton) {
+        chatBackButton.addEventListener('click', () => {
+            showPage('dashboard'); // Volta para a Visão Geral
+        });
+    }
+
 
     // Event listener para o novo botão de Gerar Insights Financeiros
     const generateInsightsButton = document.getElementById('generate-insights-button');
@@ -2541,6 +2539,37 @@ Ser o cérebro financeiro do usuário — confiável, atento, útil, direto e ad
         }
     });
 
+    // --- Funções e Listeners de Filtros (NOVO) ---
+    function populateFilterCategories() {
+        filterCategorySelect.innerHTML = '<option value="all">Todas as Categorias</option>';
+        categories.forEach(cat => {
+            const option = document.createElement('option');
+            option.value = cat.id;
+            option.textContent = cat.name;
+            filterCategorySelect.appendChild(option);
+        });
+    }
+    
+    filterTypeSelect.addEventListener('change', renderTransactions);
+    filterCategorySelect.addEventListener('change', renderTransactions);
+    filterStatusSelect.addEventListener('change', renderTransactions);
+    resetFiltersButton.addEventListener('click', () => {
+        filterTypeSelect.value = 'all';
+        filterCategorySelect.value = 'all';
+        filterStatusSelect.value = 'all';
+        renderTransactions();
+    });
+
+    // Fecha dropdowns de ação ao clicar fora
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.action-menu-button')) {
+            document.querySelectorAll('.action-menu-dropdown').forEach(dropdown => {
+                dropdown.classList.add('hidden');
+            });
+        }
+    });
+
+
     // Função para renderizar o gráfico de despesas
     function renderExpenseChart() {
         const ctx = document.getElementById('expense-chart').getContext('2d');
@@ -2616,5 +2645,39 @@ Ser o cérebro financeiro do usuário — confiável, atento, útil, direto e ad
                 }
             }
         });
+    }
+
+    // --- Funções de Notificação (Toast) ---
+    function showToast(message, type = 'info') {
+        const container = document.getElementById('toast-container');
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+
+        const icons = {
+            success: 'fa-solid fa-circle-check',
+            error: 'fa-solid fa-circle-xmark',
+            info: 'fa-solid fa-circle-info'
+        };
+
+        toast.innerHTML = `
+            <i class="${icons[type]}"></i>
+            <span>${message}</span>
+        `;
+        
+        container.appendChild(toast);
+
+        // Trigger the animation
+        setTimeout(() => {
+            toast.classList.add('show');
+        }, 100);
+
+        // Remove the toast after 3 seconds
+        setTimeout(() => {
+            toast.classList.remove('show');
+            // Remove the element from DOM after the fade out animation
+            toast.addEventListener('transitionend', () => {
+                toast.remove();
+            });
+        }, 3000);
     }
 });
