@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finanças Claras</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome para ícones "bonitinhos" -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css" referrerpolicy="no-referrer" />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chart.js para gráficos -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <!-- Tela de Login -->
+    <section id="login-screen" class="absolute inset-0 bg-gray-100 flex items-center justify-center p-4">
+        <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-md">
+            <h2 class="text-3xl font-bold text-center text-gray-900 mb-6">Finanças Claras</h2>
+            <p class="text-center text-gray-600 mb-8">Faça login para acessar suas finanças.</p>
+            <form id="login-form" class="space-y-6">
+                <div>
+                    <label for="login-email" class="block text-sm font-medium text-gray-700">Email</label>
+                    <input type="email" id="login-email" class="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500" placeholder="seuemail@exemplo.com" required>
+                </div>
+                <div>
+                    <label for="login-password" class="block text-sm font-medium text-gray-700">Senha</label>
+                    <input type="password" id="login-password" class="mt-1 block w-full p-3 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-blue-primary)]" placeholder="********" required>
+                </div>
+                <button type="submit" class="w-full py-3 px-4 border border-transparent rounded-md shadow-sm text-lg font-medium text-white bg-[var(--color-blue-primary)] hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-blue-primary)] transition duration-300">
+                    Entrar
+                </button>
+                <div id="login-error-message" class="text-red-500 text-sm text-center mt-4 hidden"></div>
+            </form>
+        </div>
+    </section>
+
+    <!-- Conteúdo Principal da Aplicação -->
+    <div id="app-content" class="hidden flex-grow flex flex-col">
+        <!-- Cabeçalho Principal (Desktop) -->
+        <header class="bg-white p-4 shadow-sm hidden md:block border-b border-gray-200">
+            <div class="container mx-auto flex justify-between items-center">
+                <h1 class="text-3xl font-bold text-gray-900">Finanças Claras</h1>
+                <nav class="flex items-center space-x-6">
+                    <ul class="flex space-x-6">
+                        <li><a href="#" data-page="dashboard" class="nav-link text-lg font-medium hover:text-blue-primary transition duration-200 rounded-md py-2 px-3">Visão Geral</a></li>
+                        <li><a href="#" data-page="transactions" class="nav-link text-lg font-medium hover:text-blue-primary transition duration-200 rounded-md py-2 px-3">Transações</a></li>
+                        <li><a href="#" data-page="chat" class="nav-link text-lg font-medium hover:text-blue-primary transition duration-200 rounded-md py-2 px-3">Assistente IA</a></li>
+                        <li><a href="#" data-page="more-options" class="nav-link text-lg font-medium hover:text-blue-primary transition duration-200 rounded-md py-2 px-3">Mais Opções</a></li>
+                    </ul>
+                    <button id="logout-button-desktop" class="px-4 py-2 bg-red-500 text-white font-medium rounded-md hover:bg-red-600 transition duration-300">Sair</button>
+                </nav>
+            </div>
+        </header>
+
+        <main class="container mx-auto p-4 flex-grow pb-32 md:pb-8"> <!-- Ajustado: pb-24 para pb-32 em mobile -->
+            <!-- Visão Geral (Dashboard) -->
+            <section id="dashboard" class="page-section active">
+                <h2 class="text-3xl font-bold mb-2 text-[var(--color-heading-green)]">Visão Geral</h2>
+                <p class="text-gray-600 text-lg mb-6">Seu resumo financeiro rápido.</p>
+
+                <!-- Cards de Resumo (MOVIMENTE OS CARDS DE TRANSAÇÕES PARA CÁ) -->
+                <div class="space-y-4 mb-8">
+                    <!-- Card Saldo Atual -->
+                    <div class="bg-white p-5 rounded-lg shadow-md flex items-center justify-between">
+                        <div>
+                            <p class="text-base text-gray-600">Saldo Atual</p>
+                            <p class="font-bold text-3xl text-[var(--color-blue-primary)]" id="dashboard-current-balance">R$ 0,00</p>
+                            <p class="text-sm text-gray-500">Receitas - Despesas Pagas</p>
+                        </div>
+                        <i class="fa-solid fa-wallet text-3xl"></i>
+                    </div>
+
+                    <!-- Card Despesas Pagas -->
+                    <div class="bg-white p-5 rounded-lg shadow-md flex items-center justify-between">
+                        <div>
+                            <p class="text-base text-gray-600">Despesas Pagas</p>
+                            <p class="font-bold text-3xl text-[var(--color-red-negative)]" id="dashboard-paid-expenses">R$ 0,00</p>
+                            <p class="text-sm text-gray-500">Soma de todas as despesas pagas.</p>
+                        </div>
+                        <i class="fa-solid fa-circle-check text-3xl text-green-500"></i>
+                    </div>
+
+                    <!-- Card Despesas Pendentes -->
+                    <div class="bg-white p-5 rounded-lg shadow-md flex items-center justify-between">
+                        <div>
+                            <p class="text-base text-gray-600">Despesas Pendentes</p>
+                            <p class="font-bold text-3xl text-yellow-600" id="dashboard-pending-expenses">R$ 0,00</p>
+                            <p class="text-sm text-gray-500">Soma de todas as despesas a pagar.</p>
+                        </div>
+                        <i class="fa-solid fa-clock-rotate-left text-3xl text-yellow-600"></i>
+                    </div>
+
+                    <!-- Card Total Guardado (Caixinhas) -->
+                    <div class="bg-white p-5 rounded-lg shadow-md flex items-center justify-between">
+                        <div>
+                            <p class="text-base text-gray-600">Total Guardado (Caixinhas)</p>
+                            <p class="font-bold text-3xl text-[var(--color-blue-primary)]" id="dashboard-total-caixinhas-saved">R$ 0,00</p>
+                            <p class="text-sm text-gray-500">Soma do valor atual das suas caixinhas</p>
+                        </div>
+                        <i class="fa-solid fa-piggy-bank text-3xl"></i>
+                    </div>
+                </div>
+
+                <!-- Botão para Insights Financeiros -->
+                <button id="generate-insights-button" class="w-full sm:w-auto px-6 py-3 bg-yellow-500 text-white font-medium rounded-lg hover:bg-yellow-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-yellow-500 transition duration-300 shadow-md mb-8">
+                    ✨ Gerar Insights Financeiros
+                </button>
+
+                <!-- Gráfico -->
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <h3 class="text-xl font-semibold mb-4">Despesas do Mês por Categoria</h3>
+                    <div class="h-64 md:h-80">
+                        <canvas id="expense-chart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Transações -->
+            <section id="transactions" class="page-section">
+                <h2 class="text-3xl font-bold mb-2 text-[var(--color-heading-green)]">Transações</h2>
+                <p class="text-gray-600 text-lg mb-6">Suas movimentações e resumo financeiro.</p>
+
+                <!-- Cards de Resumo de Transações (REMOVIDOS, MOVIDOS PARA VISÃO GERAL) -->
+
+                <!-- Botão de adicionar transação movido para um botão flutuante -->
+
+                <!-- Navegação por Mês -->
+                <div class="flex items-center justify-between bg-white p-4 rounded-lg shadow-sm mb-6">
+                    <button id="prev-month-button" class="px-3 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 flex items-center space-x-2">
+                        <i class="fa-solid fa-chevron-left"></i>
+                        <span class="hidden sm:inline">Mês Anterior</span>
+                    </button>
+                    <span id="current-month-display" class="font-semibold text-lg text-center mx-4 flex-shrink-0"></span>
+                    <button id="next-month-button" class="px-3 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 flex items-center space-x-2">
+                        <span class="hidden sm:inline">Próximo Mês</span>
+                        <i class="fa-solid fa-chevron-right"></i>
+                    </button>
+                </div>
+
+                <!-- Seção de Filtros de Transações (DESIGN MELHORADO) -->
+                <div id="transaction-filters" class="bg-white p-4 rounded-lg shadow-sm mb-6 flex flex-col md:flex-row md:items-center gap-4">
+                    <h3 class="text-lg font-semibold text-gray-800 md:mb-0">Filtrar por:</h3>
+                    <div class="flex-grow grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                        <select id="filter-type" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]">
+                            <option value="all">Todos os Tipos</option>
+                            <option value="income">Receitas</option>
+                            <option value="expense">Despesas</option>
+                            <option value="caixinha">Mov. de Caixinha</option>
+                        </select>
+                        <select id="filter-category" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]">
+                            <option value="all">Todas as Categorias</option>
+                            <!-- Categorias serão populadas pelo JS -->
+                        </select>
+                        <select id="filter-status" class="w-full p-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]">
+                            <option value="all">Todos os Status</option>
+                            <option value="Pago">Pago</option>
+                            <option value="Recebido">Recebido</option>
+                            <option value="Pendente">Pendente</option>
+                            <option value="Confirmado">Confirmado</option>
+                        </select>
+                    </div>
+                    <button id="reset-filters-button" class="w-full md:w-auto px-4 py-2 bg-gray-600 text-white font-medium rounded-lg hover:bg-gray-700 transition duration-300">
+                        Limpar Filtros
+                    </button>
+                </div>
+
+
+                <!-- Lista de Transações - Agrupadas por Data -->
+                <div id="transactions-list-container" class="relative">
+                    <!-- Linha do tempo vertical sutil -->
+                    <div class="absolute left-3 top-0 bottom-0 w-0.5 bg-gray-200"></div>
+                    <!-- Transações serão renderizadas aqui pelo JavaScript -->
+                    <p class="text-center text-gray-500 py-4" id="no-transactions-message">Nenhuma transação cadastrada ainda.</p>
+                </div>
+            </section>
+
+            <!-- Chat com IA (Assistente) -->
+            <section id="chat" class="page-section">
+                <!-- O conteúdo do chat foi movido para um container interno para melhor controle do layout -->
+                <div id="chat-container" class="bg-white rounded-lg shadow-md flex flex-col h-full">
+                    <div class="p-4 border-b flex items-center">
+                        <!-- NOVO: Botão Voltar (apenas mobile) -->
+                        <button id="chat-back-button" class="md:hidden mr-4 p-2 rounded-full hover:bg-gray-100">
+                            <i class="fa-solid fa-arrow-left text-lg"></i>
+                        </button>
+                        <h2 class="text-2xl font-bold text-gray-900 flex-grow">Assistente IA</h2>
+                        <span id="active-api-key-indicator" class="text-sm font-mono bg-gray-200 text-gray-600 px-2 py-0.5 rounded-md hidden"></span>
+                    </div>
+
+                    <!-- Área de Mensagens -->
+                    <div id="chat-messages" class="flex-grow overflow-y-auto p-4 space-y-4">
+                        <!-- Mensagem da IA de introdução -->
+                        <div class="flex justify-start">
+                            <div class="bg-gray-100 text-gray-800 p-3 rounded-xl rounded-bl-none max-w-xs md:max-w-md shadow-sm">
+                                Olá! Sou seu assistente financeiro. Por favor, insira sua chave da API Gemini em "Mais Opções" para que eu possa funcionar.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Indicador de Carregamento -->
+                    <div id="chat-loading-indicator" class="text-center text-gray-500 py-2 hidden">
+                        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+                        Pensando...
+                    </div>
+
+                    <!-- Campo de Input de Texto e Botões -->
+                    <div id="chat-input-container" class="p-4 bg-white border-t border-gray-200 flex items-center">
+                        <button id="clear-chat-button" class="bg-gray-200 text-gray-600 p-3 rounded-full shadow-md hover:bg-gray-300 transition duration-300 mr-2">
+                            <i class="fa-solid fa-trash-can text-lg"></i>
+                        </button>
+                        <button id="refresh-chat-data-button" class="bg-gray-200 text-gray-600 p-3 rounded-full shadow-md hover:bg-gray-300 transition duration-300 mr-2">
+                            <i class="fa-solid fa-arrows-rotate text-lg"></i>
+                        </button>
+                        <input type="text" id="chat-input" placeholder="Assistente não configurado..." 
+                               class="flex-grow min-w-0 p-3 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]" disabled>
+                        <button id="chat-send-button" class="px-6 py-3 bg-[var(--color-blue-primary)] text-white font-medium rounded-r-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-blue-primary)] transition duration-300" disabled>
+                            <i class="fa-solid fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Mais Opções -->
+            <section id="more-options" class="page-section">
+                <h2 class="text-3xl font-bold mb-2 text-gray-900">Mais Opções</h2>
+                <p class="text-gray-600 text-lg mb-6">Explore funcionalidades e configurações adicionais.</p>
+                
+                <div class="space-y-4">
+                    <!-- Card/Link para Gerenciamento de API Gemini -->
+                    <a href="#" data-page="api-management" class="flex items-center bg-white p-4 rounded-lg shadow-md hover:shadow-lg transition duration-200">
+                        <i class="fa-solid fa-key text-2xl text-[var(--color-option-icon-green)] mr-4"></i>
+                        <div class="flex-grow">
+                            <p class="font-semibold text-lg text-gray-800">Chave de API Gemini</p>
+                            <p class="text-sm text-gray-600">Gerencie sua chave de acesso para o Assistente IA.</p>
+                        </div>
+                        <i class="fa-solid fa-chevron-right text-xl text-gray-400"></i>
+                    </a>
+                    
+                    <!-- Card/Link para Categorias e Caixinhas -->
+                    <a href="#" data-page="categories-management" class="flex items-center bg-white p-4 rounded-lg shadow-md hover:shadow-lg transition duration-200">
+                        <i class="fa-solid fa-tags text-2xl text-[var(--color-option-icon-green)] mr-4"></i>
+                        <div class="flex-grow">
+                            <p class="font-semibold text-lg text-gray-800">Categorias e Caixinhas</p>
+                            <p class="text-sm text-gray-600">Gerencie receitas, despesas e metas de poupança.</p>
+                        </div>
+                        <i class="fa-solid fa-chevron-right text-xl text-gray-400"></i>
+                    </a>
+                    <!-- Card/Link para Orçamento -->
+                    <a href="#" data-page="budget-management" class="flex items-center bg-white p-4 rounded-lg shadow-md hover:shadow-lg transition duration-200">
+                        <i class="fa-solid fa-wallet text-2xl text-[var(--color-option-icon-green)] mr-4"></i>
+                        <div class="flex-grow">
+                            <p class="font-semibold text-lg text-gray-800">Orçamento</p>
+                            <p class="text-sm text-gray-600">Defina e acompanhe seu orçamento mensal.</p>
+                        </div>
+                        <i class="fa-solid fa-chevron-right text-xl text-gray-400"></i>
+                    </a>
+                    <!-- Card/Link para Configurar IA (ATUALIZADO) -->
+                    <a href="#" data-page="ai-config" class="flex items-center bg-white p-4 rounded-lg shadow-md hover:shadow-lg transition duration-200">
+                        <i class="fa-solid fa-brain text-2xl text-[var(--color-option-icon-green)] mr-4"></i>
+                        <div class="flex-grow">
+                            <p class="font-semibold text-lg text-gray-800">Configurar IA</p>
+                            <p class="text-sm text-gray-600">Personalize a persona e personalidade do assistente financeiro.</p>
+                        </div>
+                        <i class="fa-solid fa-chevron-right text-xl text-gray-400"></i>
+                    </a>
+                    <!-- Botão de Sair (Mobile) -->
+                    <button id="logout-button-mobile" class="w-full px-6 py-3 bg-red-500 text-white font-medium rounded-lg hover:bg-red-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition duration-300 shadow-md flex items-center justify-center">
+                        <i class="fa-solid fa-right-from-bracket mr-2"></i> Sair
+                    </button>
+                </div>
+            </section>
+
+            <!-- Seção de Gerenciamento de Categorias (Atualizada) -->
+            <section id="categories-management" class="page-section">
+                <h2 class="text-3xl font-bold mb-2 text-gray-900">Categorias e Caixinhas</h2>
+                <p class="text-gray-600 text-lg mb-6">Gerencie suas categorias de transações e metas de poupança.</p>
+
+                <div class="mb-6">
+                    <input type="text" id="category-search-input" placeholder="Buscar categoria..."
+                           class="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]">
+                </div>
+
+                <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4 mb-8">
+                    <button id="add-new-category-button" class="w-full sm:w-auto px-6 py-3 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-600 transition duration-300 shadow-md flex items-center justify-center">
+                        <i class="fa-solid fa-plus mr-2"></i>
+                        Nova Categoria
+                    </button>
+                    <button id="optimize-categories-button" class="w-full sm:w-auto px-6 py-3 bg-indigo-500 text-white font-medium rounded-lg hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-300 shadow-md flex items-center justify-center">
+                        <i class="fa-solid fa-wand-magic-sparkles mr-2"></i>
+                        Otimizar com IA
+                    </button>
+                </div>
+
+                <div id="category-list-container" class="space-y-4">
+                    <!-- Categorias e Caixinhas serão renderizadas aqui pelo JavaScript -->
+                </div>
+            </section>
+
+            <!-- Seção de Orçamento -->
+            <section id="budget-management" class="page-section">
+                <h2 class="text-3xl font-bold mb-6 text-gray-900">Meu Orçamento</h2>
+                <p class="text-gray-600 text-lg mb-6">Gerencie seus orçamentos mensais por categoria para controlar seus gastos.</p>
+                <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4 mb-8">
+                    <button id="configure-budget-button" class="w-full sm:w-auto px-6 py-3 bg-[var(--color-blue-primary)] text-white font-medium rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-blue-primary)] transition duration-300 shadow-md">
+                        Configurar Orçamento Mensal
+                    </button>
+                    <button id="optimize-budget-button" class="w-full sm:w-auto px-6 py-3 bg-indigo-500 text-white font-medium rounded-lg hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition duration-300 shadow-md flex items-center justify-center">
+                        <i class="fa-solid fa-lightbulb mr-2"></i> Otimizar Orçamento com IA
+                    </button>
+                </div>
+                <div id="budget-list-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <!-- Orçamentos serão renderizados aqui pelo JavaScript -->
+                    <p class="text-center text-gray-500 py-4 col-span-full" id="no-budgets-message">Nenhum orçamento configurado ainda.</p>
+                </div>
+            </section>
+
+            <!-- Seção de Configuração da IA (NOVA ESTRUTURA) -->
+            <section id="ai-config" class="page-section">
+                <h2 class="text-3xl font-bold mb-2 text-gray-900">Configurar Assistente IA</h2>
+                <p class="text-gray-600 text-lg mb-6">Ajuste a personalidade do seu assistente financeiro.</p>
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <div class="space-y-8">
+                        <!-- Campo 1: Personagem -->
+                        <div class="space-y-2">
+                            <label for="ai-persona" class="block text-lg font-semibold text-gray-800">
+                                Personagem (Quem é a IA)
+                            </label>
+                            <textarea id="ai-persona" rows="4" class="w-full p-3 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-[var(--color-blue-primary)] focus:border-[var(--color-blue-primary)]" placeholder="Descreva o papel principal da IA. Ex: Você é um coach financeiro durão..."></textarea>
+                            <p class="text-xs text-gray-500">
+                                Esta é a diretriz principal que define o papel e o comportamento da IA.
+                            </p>
+                        </div>
+
+                        <!-- Campo 2: Personalidade -->
+                        <div class="space-y-2 mt-6">
+                            <label for="ai-personality" class="block text-lg font-semibold text-gray-800">
+                                Personalidade (Como a IA se comporta)
+                            </label>
+                            <textarea id="ai-personality" rows="4" class="w-full p-3 border border-gray-300 rounded-md shadow-sm focus:ring-2 focus:ring-[var(--color-blue-primary)] focus:border-[var(--color-blue-primary)]" placeholder="Ex: A IA é sempre encorajadora, usa linguagem simples e respostas concisas."></textarea>
+                            <p class="text-xs text-gray-500">
+                                Descreva o tone, o estilo de fala e a profundidade das respostas da IA.
+                            </p>
+                        </div>
+                        
+                        <!-- Botão Salvar -->
+                        <div class="flex justify-end mt-6">
+                            <button id="save-ai-config-button" class="px-6 py-3 bg-[var(--color-blue-primary)] text-white font-medium rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-blue-primary)] transition duration-300 shadow-md">
+                                Salvar Configurações
+                            </button>
+                        </div>
+                        <div id="ai-config-status-message" class="mt-4 text-sm font-medium text-green-600 hidden">
+                            Configurações salvas!
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+
+        <!-- Barra de Navegação Inferior (Mobile) -->
+        <footer class="mobile-nav-bar md:hidden">
+            <a href="#" data-page="dashboard" class="mobile-nav-item active">
+                <i class="fa-solid fa-table-columns text-xl"></i>
+                <span>Visão Geral</span>
+            </a>
+            <a href="#" data-page="transactions" class="mobile-nav-item">
+                <i class="fa-solid fa-list-check text-xl"></i>
+                <span>Transações</span>
+            </a>
+            <a href="#" data-page="chat" class="mobile-nav-item">
+                <!-- Ícone do Assistente IA (Bot) -->
+                <i class="fa-solid fa-robot text-xl"></i>
+                <span>Assistente</span>
+            </a>
+            <a href="#" data-page="more-options" class="mobile-nav-item">
+                <i class="fa-solid fa-ellipsis text-xl"></i>
+                <span>Mais</span>
+            </a>
+        </footer>
+        
+        <!-- NOVO: Botão Flutuante para Adicionar Transação -->
+        <button id="fab-add-transaction" class="hidden fixed z-50 bottom-24 right-6 md:bottom-8 md:right-8 bg-[var(--color-blue-primary)] w-16 h-16 rounded-full flex items-center justify-center text-white shadow-lg hover:bg-blue-600 transition-transform transform hover:scale-110">
+            <i class="fa-solid fa-plus text-2xl"></i>
+        </button>
+
+    </div>
+
+    <!-- Modal para Adicionar/Editar Categoria (ATUALIZADO) -->
+    <div id="category-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" id="close-category-modal">&times;</span>
+            <h3 class="text-2xl font-bold mb-4 text-gray-900" id="category-modal-title">Adicionar Nova Categoria</h3>
+            <form id="category-form">
+                <input type="hidden" id="category-id">
+                <div class="mb-4">
+                    <label for="category-name" class="block text-sm font-medium text-gray-700 mb-1">Nome da Categoria</label>
+                    <input type="text" id="category-name" class="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]" required>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Tipo</label>
+                    <div class="flex space-x-4">
+                        <label class="inline-flex items-center">
+                            <input type="radio" name="category-type" value="expense" class="form-radio text-red-500" checked>
+                            <span class="ml-2 text-gray-700">Despesa</span>
+                        </label>
+                        <label class="inline-flex items-center">
+                            <input type="radio" name="category-type" value="income" class="form-radio text-green-500">
+                            <span class="ml-2 text-gray-700">Receita</span>
+                        </label>
+                        <label class="inline-flex items-center">
+                            <input type="radio" name="category-type" value="caixinha" class="form-radio text-blue-500">
+                            <span class="ml-2 text-gray-700">Caixinha</span>
+                        </label>
+                    </div>
+                </div>
+                <!-- ADICIONADO: Campo Valor Alvo para Caixinhas -->
+                <div class="mb-4 hidden" id="target-amount-field">
+                    <label for="category-target-amount" class="block text-sm font-medium text-gray-700 mb-1">Valor Alvo (R$)</label>
+                    <input type="text" id="category-target-amount" inputmode="numeric" class="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]">
+                </div>
+                <div class="mb-4" id="priority-field">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Prioridade</label>
+                    <div class="flex space-x-4">
+                        <label class="inline-flex items-center">
+                            <input type="radio" name="category-priority" value="essential" class="form-radio text-green-500" checked>
+                            <span class="ml-2 text-gray-700">Essencial</span>
+                        </label>
+                        <label class="inline-flex items-center">
+                            <input type="radio" name="category-priority" value="non-essential" class="form-radio text-red-500">
+                            <span class="ml-2 text-gray-700">Não Essencial</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="flex justify-end space-x-4">
+                    <button type="button" id="cancel-category-button" class="px-6 py-3 bg-gray-300 text-gray-800 font-medium rounded-lg hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-blue-primary)] transition duration-300 shadow-md">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="px-6 py-3 bg-[var(--color-blue-primary)] text-white font-medium rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--color-blue-primary)] transition duration-300 shadow-md">
+                        Salvar Categoria
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal para Adicionar/Editar Transação (FLUXO MULTI-ETAPAS) -->
+    <div id="transaction-modal" class="modal">
+        <div class="modal-content">
+            <!-- O botão de fechar continua o mesmo -->
+            <span class="close-button" id="close-transaction-modal">&times;</span>
+            <form id="transaction-form" class="flex flex-col h-full">
+                <input type="hidden" id="transaction-id">
+                <!-- ETAPA 1: TIPO DE MOVIMENTAÇÃO -->
+                <div id="transaction-step-1" class="step-container">
+                    <h3 class="text-2xl font-bold mb-2 text-gray-900">Qual o tipo de movimentação?</h3>
+                    <p class="text-gray-600 mb-6">Selecione uma das opções para começar.</p>
+                    <div class="grid grid-cols-2 gap-4 py-4 flex-1">
+                        <button type="button" data-type="income" class="step-1-type-button h-full text-base flex-col gap-2 p-4 border rounded-lg hover:bg-gray-100 transition">
+                            <i class="fa-solid fa-arrow-up text-green-500 text-2xl mb-2"></i>
+                            <span class="font-semibold">Receita</span>
+                        </button>
+                        <button type="button" data-type="expense" class="step-1-type-button h-full text-base flex-col gap-2 p-4 border rounded-lg hover:bg-gray-100 transition">
+                            <i class="fa-solid fa-arrow-down text-red-500 text-2xl mb-2"></i>
+                            <span class="font-semibold">Despesa</span>
+                        </button>
+                        <button type="button" data-type="deposit" class="step-1-type-button h-full text-base flex-col gap-2 p-4 border rounded-lg hover:bg-gray-100 transition">
+                            <i class="fa-solid fa-piggy-bank text-blue-500 text-2xl mb-2"></i>
+                            <span class="font-semibold">Guardar</span>
+                        </button>
+                        <button type="button" data-type="withdraw" class="step-1-type-button h-full text-base flex-col gap-2 p-4 border rounded-lg hover:bg-gray-100 transition">
+                            <i class="fa-solid fa-wallet text-indigo-500 text-2xl mb-2"></i>
+                            <span class="font-semibold">Resgatar</span>
+                        </button>
+                    </div>
+                    <div class="flex justify-end mt-4"> 
+                         <button type="button" id="cancel-transaction-button-step1" class="px-6 py-3 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300">Cancelar</button>
+                    </div>
+                </div>
+                <!-- ETAPA 2: VALOR, DESCRIÇÃO E CATEGORIA -->
+                <div id="transaction-step-2" class="step-container hidden">
+                    <h3 class="text-2xl font-bold mb-2 text-gray-900" id="step-2-title">Nova Despesa</h3>
+                    <p class="text-gray-600 mb-6">Informe os detalhes da movimentação.</p>
+                    <div class="space-y-6 py-4">
+                        <div class="mb-4">
+                            <label for="transaction-amount" class="block text-sm font-medium text-gray-700 mb-1">Valor (R$)</label>
+                            <input type="text" id="transaction-amount" inputmode="numeric" class="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]" required>
+                        </div>
+                        <div class="mb-4">
+                           <label for="transaction-description" class="block text-sm font-medium text-gray-700 mb-1">Descrição</label>
+                           <input type="text" id="transaction-description" class="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]">
+                        </div>
+                        <div class="mb-4">
+                            <label for="transaction-category" class="block text-sm font-medium text-gray-700 mb-1">Categoria</label>
+                            <div class="flex items-center gap-2">
+                                <select id="transaction-category" class="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]" required>
+                                    <!-- Options will be populated by JS -->
+                                </select>
+                                <button type="button" id="suggest-category-button" class="ai-suggestion-button" title="Sugerir Categoria com IA">
+                                   <i class="fa-solid fa-wand-magic-sparkles"></i>
+                                </button>
+                                <!-- NOVO BOTÃO RÁPIDO -->
+                                <button type="button" id="add-category-quick-button" class="ai-suggestion-button" title="Adicionar Nova Categoria">
+                                    <i class="fa-solid fa-plus"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between mt-4">
+                        <button type="button" class="step-back-button px-6 py-3 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300">Voltar</button>
+                        <button type="button" class="step-next-button px-6 py-3 bg-[var(--color-blue-primary)] text-white font-medium rounded-lg hover:bg-blue-600">Continuar</button>
+                    </div>
+                </div>
+                <!-- ETAPA 3: DETALHES FINAIS (DATA, RECORRÊNCIA E STATUS) -->
+                <div id="transaction-step-3" class="step-container hidden">
+                    <h3 class="text-2xl font-bold mb-2 text-gray-900">Detalhes Finais</h3>
+                    <p class="text-gray-600 mb-6">Ajuste os últimos detalhes e salve.</p>
+                    <div class="space-y-6 py-4">
+                        <div class="mb-4">
+                            <label for="transaction-date" class="block text-sm font-medium text-gray-700 mb-1">Data</label>
+                            <input type="date" id="transaction-date" class="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]" required>
+                        </div>
+                        <div class="mb-4" id="installments-field">
+                            <label for="transaction-installments" class="block text-sm font-medium text-gray-700 mb-1">Número de Parcelas</label>
+                            <input type="number" id="transaction-installments" class="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]" value="1" min="1">
+                            <p class="text-xs text-gray-500 mt-1">Defina 1 para transação única ou o número de parcelas para recorrência mensal.</p>
+                        </div>
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Status</label>
+                            <div id="transaction-status-options" class="flex space-x-2">
+                                <!-- Opções serão geradas dinamicamente via JS -->
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex justify-between mt-4">
+                        <button type="button" class="step-back-button px-6 py-3 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300">Voltar</button>
+                        <button type="submit" class="px-6 py-3 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700">Salvar Transação</button>
+                    </div>
+                </div>
+                <!-- ETAPA 4 REMOVIDA -->
+                <!-- Radios ocultos para guardar o estado do tipo -->
+                <div class="hidden"> 
+                     <input type="radio" name="transaction-type" value="income"> 
+                     <input type="radio" name="transaction-type" value="expense"> 
+                     <input type="radio" name="transaction-type" value="deposit"> 
+                     <input type="radio" name="transaction-type" value="withdraw">
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Modal de Confirmação Genérico -->
+    <div id="confirmation-modal" class="modal">
+        <div class="modal-content">
+            <h3 class="text-2xl font-bold mb-4 text-gray-900" id="confirmation-modal-title"></h3>
+            <p class="text-gray-700 mb-6" id="confirmation-modal-message"></p>
+            <div class="confirmation-modal-buttons">
+                <button type="button" id="cancel-confirmation-button" class="cancel-delete">Cancelar</button>
+                <button type="button" id="confirm-action-button" class="confirm-delete">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para Insights Financeiros -->
+    <div id="insights-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" id="close-insights-modal">&times;</span>
+            <h3 class="text-2xl font-bold mb-4 text-gray-900">Insights Financeiros</h3>
+            <div id="insights-content" class="min-h-[100px] flex flex-col justify-center items-center">
+                <div id="insights-loading-indicator" class="text-center text-gray-500 py-2">
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+                    Gerando insights...
+                </div>
+                <p id="insights-text" class="text-gray-700 text-center"></p>
+            </div>
+            <div class="flex justify-end mt-4">
+                <button type="button" id="close-insights-button" class="px-6 py-3 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para Otimização de Orçamento com IA -->
+    <div id="budget-optimization-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" id="close-budget-optimization-modal">&times;</span>
+            <h3 class="text-2xl font-bold mb-4 text-gray-900">Otimização de Orçamento com IA</h3>
+            <div id="budget-optimization-content" class="min-h-[100px] flex flex-col justify-center items-center">
+                <div id="budget-optimization-loading-indicator" class="text-center text-gray-500 py-2">
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+                    Analisando orçamento...
+                </div>
+                <p id="budget-optimization-text" class="text-gray-700 text-center"></p>
+            </div>
+            <div class="flex justify-end mt-4">
+                <button type="button" id="close-budget-optimization-button" class="px-6 py-3 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para Gerenciamento de Chave de API Gemini (ATUALIZADO PARA 5 CAMPOS) -->
+    <div id="api-keys-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" id="close-api-keys-modal">&times;</span>
+            <h3 class="text-2xl font-bold mb-4 text-gray-900">Gerenciar Chaves de API Gemini</h3>
+            <p class="text-gray-600 mb-6">Insira até 5 chaves de API. A aplicação tentará usar a primeira chave válida disponível.</p>
+            <div class="space-y-4 mb-4">
+                <div>
+                    <label for="modal-api-key-1" class="block text-sm font-medium text-gray-700 mb-1">Chave de API 1</label>
+                    <input type="text" id="modal-api-key-1" class="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]" placeholder="Cole sua chave de API aqui...">
+                </div>
+                <div>
+                    <label for="modal-api-key-2" class="block text-sm font-medium text-gray-700 mb-1">Chave de API 2</label>
+                    <input type="text" id="modal-api-key-2" class="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]" placeholder="Cole sua chave de API aqui...">
+                </div>
+                <div>
+                    <label for="modal-api-key-3" class="block text-sm font-medium text-gray-700 mb-1">Chave de API 3</label>
+                    <input type="text" id="modal-api-key-3" class="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]" placeholder="Cole sua chave de API aqui...">
+                </div>
+                <div>
+                    <label for="modal-api-key-4" class="block text-sm font-medium text-gray-700 mb-1">Chave de API 4</label>
+                    <input type="text" id="modal-api-key-4" class="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]" placeholder="Cole sua chave de API aqui...">
+                </div>
+                <div>
+                    <label for="modal-api-key-5" class="block text-sm font-medium text-gray-700 mb-1">Chave de API 5</label>
+                    <input type="text" id="modal-api-key-5" class="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]" placeholder="Cole sua chave de API aqui...">
+                </div>
+            </div>
+            <div id="api-modal-status-message" class="p-3 rounded-md border text-sm hidden">
+                <p id="api-modal-message-text"></p>
+            </div>
+            <div class="flex justify-end mt-4 space-x-4">
+                <button type="button" id="save-api-keys-modal-button" class="px-6 py-3 bg-[var(--color-blue-primary)] text-white font-medium rounded-lg hover:bg-blue-600">Salvar Chaves</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal para Adicionar/Editar Orçamento -->
+    <div id="budget-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" id="close-budget-modal">&times;</span>
+            <h3 class="text-2xl font-bold mb-4 text-gray-900" id="budget-modal-title">Novo Orçamento</h3>
+            <p class="text-gray-600 mb-6">Defina um limite de gastos para uma categoria de despesa neste mês.</p>
+            <form id="budget-form">
+                <input type="hidden" id="budget-id">
+                <div class="mb-4">
+                    <label for="budget-category" class="block text-sm font-medium text-gray-700 mb-1">Categoria de Despesa</label>
+                    <select id="budget-category" class="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]" required>
+                        <!-- Opções de categorias de despesa serão populadas via JS -->
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label for="budget-amount" class="block text-sm font-medium text-gray-700 mb-1">Valor do Orçamento (R$)</label>
+                    <input type="text" id="budget-amount" inputmode="numeric" class="w-full p-3 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]" required placeholder="0,00">
+                </div>
+                <div class="flex justify-end space-x-4 mt-6">
+                    <button type="button" id="cancel-budget-button" class="px-6 py-3 bg-gray-300 text-gray-800 font-medium rounded-lg hover:bg-gray-400">Cancelar</button>
+                    <button type="submit" class="px-6 py-3 bg-[var(--color-blue-primary)] text-white font-medium rounded-lg hover:bg-blue-600">Salvar Orçamento</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- NOVO: Modal para Otimização de Categorias com IA -->
+    <div id="category-optimization-modal" class="modal">
+        <div class="modal-content wide">
+            <span class="close-button" id="close-category-optimization-modal">&times;</span>
+            <h3 class="text-2xl font-bold mb-4 text-gray-900">Otimizar Categorias com IA</h3>
+            <div id="category-optimization-content" class="min-h-[200px] flex flex-col justify-center items-center">
+                <div id="category-optimization-loading-indicator" class="text-center text-gray-500 py-2">
+                    <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+                    Analisando suas categorias...
+                </div>
+                <div id="category-optimization-suggestions" class="w-full">
+                    <!-- As sugestões da IA serão inseridas aqui -->
+                </div>
+            </div>
+            <div class="flex justify-end mt-4">
+                <button type="button" id="close-category-optimization-button" class="px-6 py-3 bg-gray-200 text-gray-800 font-medium rounded-lg hover:bg-gray-300">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- NOVO: Contêiner para as notificações (Toasts) -->
+    <div id="toast-container" class="fixed top-5 right-5 z-[1002] space-y-2"></div>
+
+
+    <script type="module" src="script.js"></script>
+
+</body>
+</html>
