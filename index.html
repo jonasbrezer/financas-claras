@@ -70,7 +70,7 @@
                 <h2 class="text-3xl font-bold mb-2 text-[var(--color-heading-green)]">Painel de Análise</h2>
                 <p class="text-gray-600 text-lg mb-6">Sua análise financeira e insights gerados por IA.</p>
 
-                <!-- NOVO: Seção de Insights Financeiros Direto na Página -->
+                <!-- Seção de Insights Financeiros Direto na Página -->
                 <div class="bg-white p-6 rounded-lg shadow-md mb-8">
                     <div class="flex justify-between items-center mb-4">
                         <h3 class="text-xl font-semibold">Insights Financeiros</h3>
@@ -85,9 +85,33 @@
                     </div>
                 </div>
 
-                <!-- Gráfico -->
+                <!-- GRÁFICOS INTERATIVOS -->
                 <div class="bg-white p-6 rounded-lg shadow-md">
-                    <h3 class="text-xl font-semibold mb-4">Despesas do Mês por Categoria</h3>
+                    <!-- Navegação por Mês para o Gráfico -->
+                    <div class="flex items-center justify-between bg-white pb-4 mb-4 border-b">
+                        <button id="prev-month-chart-button" class="px-3 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 flex items-center space-x-2">
+                            <i class="fa-solid fa-chevron-left"></i>
+                        </button>
+                        <span id="current-month-chart-display" class="font-semibold text-lg text-center mx-4 flex-shrink-0"></span>
+                        <button id="next-month-chart-button" class="px-3 py-2 bg-gray-200 text-gray-800 rounded-lg hover:bg-gray-300 flex items-center space-x-2">
+                            <i class="fa-solid fa-chevron-right"></i>
+                        </button>
+                    </div>
+
+                    <!-- Botões de Seleção de Gráfico -->
+                    <div id="chart-type-selector" class="flex justify-center space-x-2 mb-4">
+                        <button data-chart-type="pie" class="chart-type-button active">
+                            <i class="fa-solid fa-chart-pie mr-2"></i>Despesas
+                        </button>
+                        <button data-chart-type="bar" class="chart-type-button">
+                            <i class="fa-solid fa-chart-column mr-2"></i>Receita vs Despesa
+                        </button>
+                        <button data-chart-type="line" class="chart-type-button">
+                            <i class="fa-solid fa-chart-line mr-2"></i>Evolução
+                        </button>
+                    </div>
+
+                    <!-- Canvas para o Gráfico -->
                     <div class="h-64 md:h-80">
                         <canvas id="expense-chart"></canvas>
                     </div>
@@ -658,7 +682,7 @@
                 <div class="flex justify-end space-x-4 mt-6">
                     <button type="button" id="cancel-budget-button" class="px-6 py-3 bg-gray-300 text-gray-800 font-medium rounded-lg hover:bg-gray-400">Cancelar</button>
                     <button type="submit" class="px-6 py-3 bg-[var(--color-blue-primary)] text-white font-medium rounded-lg hover:bg-blue-600">Salvar Orçamento</button>
-                </div>
+                </div>a
             </form>
         </div>
     </div>
