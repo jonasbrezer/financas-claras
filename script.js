@@ -1,3 +1,4 @@
+
 // Importa os módulos necessários do Firebase
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -175,195 +176,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Event listener para o botão de cancelar no modal de confirmação
     cancelConfirmationButton.addEventListener('click', closeConfirmationModal);
-
-    // --- Funções Expostas para a IA (Function Calling) ---
-
-    // Adiciona uma transação a partir de um comando da IA.
-    window.addTransactionFromAI = async (args) => {
-        console.log("IA solicitou adicionar transação com args:", args);
-        const { description, amount, categoryName, type, status, date } = args;
-
-        // 1. Encontrar a categoria pelo nome
-        const category = categories.find(c => c.name.toLowerCase() === categoryName.toLowerCase() && c.type === type);
-
-        if (!category) {
-            return `Erro: A categoria "${categoryName}" do tipo "${type}" não foi encontrada. Por favor, peça ao usuário para verificar o nome ou criar a categoria.`;
-        }
-
-        // 2. Criar o objeto da transação
-        const newTransaction = {
-            id: generateUUID(),
-            description: description || 'Transação adicionada pela IA',
-            amount: parseFloat(amount),
-            date: date || new Date().toISOString().split('T')[0], // Usa hoje se não for fornecido
-            type: category.type,
-            categoryId: category.id,
-            status: status || (type === 'income' ? 'Recebido' : 'Pago') // Status padrão
-        };
-
-        // 3. Salvar a transação
-        await saveTransaction(newTransaction);
-        showToast("Transação adicionada pela IA com sucesso!", "success");
-        return `Sucesso: A transação "${description}" de ${formatCurrency(amount)} foi adicionada com sucesso.`;
-    };
-
-    // Apaga uma transação a partir de um comando da IA.
-    window.deleteTransactionFromAI = async (args) => {
-        console.log("IA solicitou apagar transação com args:", args);
-        const { description, amount } = args;
-
-        // 1. Encontrar a transação. Prioriza transações mais recentes.
-        const sortedTransactions = [...transactions].sort((a, b) => new Date(b.date) - new Date(a.date));
-        
-        const foundTransactions = sortedTransactions.filter(t => 
-            t.description.toLowerCase().includes(description.toLowerCase()) && 
-            parseFloat(t.amount) === parseFloat(amount)
-        );
-
-        if (foundTransactions.length === 0) {
-            return `Erro: Não encontrei nenhuma transação com a descrição "${description}" e valor ${formatCurrency(amount)}. Verifique os detalhes.`;
-        }
-        
-        if (foundTransactions.length > 1) {
-             return `Erro: Encontrei múltiplas transações com essa descrição e valor. Para evitar erros, por favor, seja mais específico. Você pode me dizer a data da transação que quer apagar?`;
-        }
-        
-        const transactionToDelete = foundTransactions[0];
-        
-        // 2. Reverter o valor se for uma transação de caixinha
-        if (transactionToDelete.type === 'caixinha' && transactionToDelete.caixinhaId) {
-            const caixinha = categories.find(c => c.id === transactionToDelete.caixinhaId);
-            if (caixinha) {
-                if (transactionToDelete.transactionType === 'deposit') {
-                    caixinha.savedAmount -= parseFloat(transactionToDelete.amount);
-                } else if (transactionToDelete.transactionType === 'withdraw') {
-                    caixinha.savedAmount += parseFloat(transactionToDelete.amount);
-                }
-                await saveCategories(); // Salva o estado atualizado das caixinhas
-            }
-        }
-        
-        // 3. Deletar a transação
-        await deleteTransactionFromFirestore(transactionToDelete.id);
-        showToast("Transação apagada pela IA com sucesso!", "success");
-        return `Sucesso: A transação "${transactionToDelete.description}" de ${formatCurrency(amount)} foi apagada.`;
-    };
-
-    // Edita uma transação existente a partir de um comando da IA.
-    window.editTransactionFromAI = async (args) => {
-        console.log("IA solicitou editar transação com args:", args);
-        const { originalDescription, originalAmount, newDescription, newAmount, newCategoryName, newDate, newStatus } = args;
-    
-        // 1. Encontrar a transação original
-        const sortedTransactions = [...transactions].sort((a, b) => new Date(b.date) - new Date(a.date));
-        const foundTransactions = sortedTransactions.filter(t =>
-            t.description.toLowerCase().includes(originalDescription.toLowerCase()) &&
-            parseFloat(t.amount) === parseFloat(originalAmount)
-        );
-    
-        if (foundTransactions.length === 0) {
-            return `Erro: Não encontrei nenhuma transação com a descrição "${originalDescription}" e valor ${formatCurrency(originalAmount)}. Verifique os detalhes.`;
-        }
-    
-        if (foundTransactions.length > 1) {
-            return `Erro: Encontrei múltiplas transações com essa descrição e valor. Para evitar erros, por favor, seja mais específico, como a data da transação.`;
-        }
-    
-        const transactionToEdit = { ...foundTransactions[0] }; // Cria uma cópia para editar
-        let finalMessage = "Sucesso: A transação foi editada. ";
-    
-        // 2. Lida com as atualizações
-        if (newDescription) {
-            transactionToEdit.description = newDescription;
-            finalMessage += `Descrição atualizada para "${newDescription}". `;
-        }
-    
-        // Validação da nova categoria, se fornecida
-        if (newCategoryName) {
-            const newCategory = categories.find(c => c.name.toLowerCase() === newCategoryName.toLowerCase() && c.type === transactionToEdit.type);
-            if (!newCategory) {
-                return `Erro: A categoria "${newCategoryName}" não foi encontrada para o tipo da transação. Peça ao usuário para verificar o nome ou cadastrar a categoria.`;
-            }
-            transactionToEdit.categoryId = newCategory.id;
-            finalMessage += `Categoria atualizada para "${newCategory.name}". `;
-        }
-    
-        if (newDate) {
-            transactionToEdit.date = newDate;
-            finalMessage += `Data atualizada para ${newDate}. `;
-        }
-    
-        if (newStatus) {
-            transactionToEdit.status = newStatus;
-            finalMessage += `Status atualizado para "${newStatus}". `;
-        }
-    
-        // A lógica de atualização de valor é mais complexa, especialmente para caixinhas
-        if (newAmount) {
-            const oldAmountValue = parseFloat(transactionToEdit.amount);
-            const newAmountValue = parseFloat(newAmount);
-            const difference = newAmountValue - oldAmountValue;
-    
-            // Se for uma transação de caixinha, ajusta o saldo da caixinha
-            if (transactionToEdit.type === 'caixinha' && transactionToEdit.caixinhaId) {
-                const caixinha = categories.find(c => c.id === transactionToEdit.caixinhaId);
-                if (caixinha) {
-                    if (transactionToEdit.transactionType === 'deposit') {
-                        caixinha.savedAmount += difference;
-                    } else if (transactionToEdit.transactionType === 'withdraw') {
-                        caixinha.savedAmount -= difference;
-                    }
-                    await saveCategories(); // Salva o saldo atualizado da caixinha
-                }
-            }
-            transactionToEdit.amount = newAmountValue;
-            finalMessage += `Valor atualizado para ${formatCurrency(newAmountValue)}.`;
-        }
-    
-        // 3. Salva a transação atualizada
-        await saveTransaction(transactionToEdit); // A função saveTransaction pode ser usada para atualizar também
-        showToast("Transação editada pela IA com sucesso!", "success");
-        return finalMessage;
-    };
-    
-    // Procura transações a partir de um comando da IA.
-    window.findTransactionsFromAI = async (args) => {
-        console.log("IA solicitou procurar transações com args:", args);
-        const { date, categoryName, description } = args;
-    
-        let results = [...transactions];
-    
-        if (date) {
-            results = results.filter(t => t.date === date);
-        }
-    
-        if (categoryName) {
-            const category = categories.find(c => c.name.toLowerCase() === categoryName.toLowerCase());
-            if (category) {
-                results = results.filter(t => t.categoryId === category.id);
-            } else {
-                return `Erro: A categoria "${categoryName}" não foi encontrada.`;
-            }
-        }
-    
-        if (description) {
-            results = results.filter(t => t.description.toLowerCase().includes(description.toLowerCase()));
-        }
-    
-        if (results.length === 0) {
-            return "Nenhuma transação encontrada com os critérios fornecidos.";
-        }
-    
-        // Formata o resultado para ser lido pela IA
-        const formattedResults = results.map(t => {
-            const category = categories.find(c => c.id === t.categoryId);
-            const catName = category ? category.name : "Desconhecida";
-            return `- Data: ${t.date}, Descrição: ${t.description}, Valor: ${formatCurrency(t.amount)}, Categoria: ${catName}, Status: ${t.status}`;
-        }).join('\n');
-    
-        return `Sucesso: Encontrei as seguintes transações:\n${formattedResults}`;
-    };
-
 
     // --- Funções de Persistência (Firebase Firestore) ---
     
@@ -893,6 +705,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         let totalPaidExpensesThisMonth = 0;
         let totalPendingExpenses = 0;
         const today = new Date();
+        today.setHours(0, 0, 0, 0); // Zera a hora para comparar apenas a data
         const currentMonthYYYYMM = getCurrentMonthYYYYMM(currentMonth); // Mês selecionado
 
         // Calcula o Saldo Atual Global (Receitas Totais - Despesas Pagas Totais)
@@ -917,18 +730,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Calcula Despesas Pagas do Mês Selecionado
         transactions.forEach(t => {
             const transactionMonth = t.date.substring(0, 7);
-            if (t.type === 'expense' && (t.status === 'Pago' || t.status === 'Recebido' || t.status === 'Confirmado') && transactionMonth === currentMonthYYYYMM) {
+            if (t.type === 'expense' && (t.status === 'Pago') && transactionMonth === currentMonthYYYYMM) {
                 totalPaidExpensesThisMonth += parseFloat(t.amount);
             }
         });
     
-        // Calcula Despesas Pendentes (Vencidas ou que vencem no mês atual)
+        // Calcula Despesas Pendentes (Vencidas ou que vencem no futuro)
         transactions.forEach(t => {
             if (t.type === 'expense' && t.status === 'Pendente') {
-                const transactionDate = new Date(t.date + 'T12:00:00');
-                if (transactionDate <= today) { // Venceu ou vence hoje
-                    totalPendingExpenses += parseFloat(t.amount);
-                }
+                totalPendingExpenses += parseFloat(t.amount);
             }
         });
     
@@ -1973,64 +1783,56 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Função para obter dados financeiros formatados para a IA
     function getFinancialDataForAI() {
-        let dataString = "";
+        let dataString = `A data de hoje é ${new Date().toLocaleDateString('pt-BR')}.\n\n`;
     
-        // 1. Resumo Geral
-        dataString += "<strong>Resumo Financeiro Geral:</strong><br>";
-        dataString += `- Saldo Disponível (Receitas - Despesas Pagas): ${dashboardCurrentBalance.textContent}<br>`;
-        dataString += `- Total Guardado em Caixinhas (não incluso no saldo): ${dashboardTotalCaixinhasSaved.textContent}<br>`;
-        dataString += `- Total de Despesas Pendentes (Vencidas + Mês Atual): ${dashboardPendingExpenses.textContent}<br>`;
+        // 1. Mapeia IDs de categoria para nomes para facilitar a leitura
+        const categoryMap = categories.reduce((map, cat) => {
+            map[cat.id] = cat.name;
+            return map;
+        }, {});
     
-        // 2. Pontos de Atenção (Problemas a serem resolvidos)
-        const categoryIds = new Set(categories.map(c => c.id));
-        const uncategorizedTransactions = transactions.filter(t => !categoryIds.has(t.categoryId) || t.categoryId === 'unknown');
+        // 2. Formata a lista de transações
+        dataString += "<strong>LISTA DE TODAS AS TRANSAÇÕES:</strong>\n";
+        if (transactions.length > 0) {
+            const formattedTransactions = transactions.map(t => {
+                const categoryName = categoryMap[t.categoryId] || 'Desconhecida';
+                return `- Descrição: ${t.description}, Valor: ${formatCurrency(t.amount)}, Data: ${t.date}, Categoria: ${categoryName}, Status: ${t.status}, Tipo: ${t.type}`;
+            }).join('\n');
+            dataString += formattedTransactions;
+        } else {
+            dataString += "Nenhuma transação registrada.\n";
+        }
+    
+        // 3. Formata a lista de orçamentos
+        dataString += "\n\n<strong>LISTA DE ORÇAMENTOS DO MÊS ATUAL:</strong>\n";
+        const currentMonthYYYYMM = getCurrentMonthYYYYMM(new Date());
+        const currentBudgets = budgets.filter(b => b.month === currentMonthYYYYMM);
+        if (currentBudgets.length > 0) {
+            const formattedBudgets = currentBudgets.map(b => {
+                const categoryName = categoryMap[b.categoryId] || 'Desconhecida';
+                const spent = transactions
+                    .filter(t => t.categoryId === b.categoryId && t.date.startsWith(currentMonthYYYYMM) && t.status === 'Pago')
+                    .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+                return `- Categoria: ${categoryName}, Orçamento: ${formatCurrency(b.amount)}, Gasto: ${formatCurrency(spent)}`;
+            }).join('\n');
+            dataString += formattedBudgets;
+        } else {
+            dataString += "Nenhum orçamento configurado para o mês atual.\n";
+        }
         
-        const budgetedCategoryIds = new Set(budgets.map(b => b.categoryId));
-        const expensesWithoutBudget = transactions.filter(t => t.type === 'expense' && !budgetedCategoryIds.has(t.categoryId));
-        const totalSpentWithoutBudget = expensesWithoutBudget.reduce((sum, t) => sum + parseFloat(t.amount), 0);
-    
-        if (uncategorizedTransactions.length > 0 || totalSpentWithoutBudget > 0) {
-            dataString += "<br><strong>Pontos de Atenção:</strong><br>";
-            if (uncategorizedTransactions.length > 0) {
-                dataString += `- Existem <strong>${uncategorizedTransactions.length} transações sem categoria definida</strong>. É importante categorizá-las para uma análise correta.<br>`;
-            }
-            if (totalSpentWithoutBudget > 0) {
-                dataString += `- Você gastou <strong>${formatCurrency(totalSpentWithoutBudget)}</strong> em categorias que não possuem um orçamento definido.<br>`;
-            }
+        // 4. Formata a lista de Caixinhas
+        dataString += "\n\n<strong>LISTA DE CAIXINHAS (METAS DE POUPANÇA):</strong>\n";
+        const caixinhas = categories.filter(c => c.type === 'caixinha');
+        if(caixinhas.length > 0){
+            const formattedCaixinhas = caixinhas.map(c => {
+                 return `- Nome: ${c.name}, Valor Guardado: ${formatCurrency(c.savedAmount || 0)}, Meta: ${formatCurrency(c.targetAmount || 0)}`;
+            }).join('\n');
+            dataString += formattedCaixinhas;
+        } else {
+            dataString += "Nenhuma caixinha criada.\n";
         }
     
-        // 3. Resumo Mensal Detalhado (últimos 3 meses)
-        dataString += "<br><strong>Análise Mensal Detalhada:</strong><br>";
-        const lastThreeMonths = new Set();
-        const today = new Date();
-        for (let i = 0; i < 3; i++) {
-            lastThreeMonths.add(getCurrentMonthYYYYMM(new Date(today.getFullYear(), today.getMonth() - i, 1)));
-        }
-    
-        lastThreeMonths.forEach(monthYYYYMM => {
-            const monthTransactions = transactions.filter(t => t.date.startsWith(monthYYYYMM));
-            if (monthTransactions.length === 0) return;
-    
-            const monthDate = new Date(monthYYYYMM + '-02T00:00:00');
-            const monthName = monthDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-            
-            let monthIncome = 0;
-            let monthExpenses = 0;
-            
-            monthTransactions.forEach(t => {
-                if(t.status === 'Pago' || t.status === 'Recebido' || t.status === 'Confirmado'){
-                    if(t.type === 'income') monthIncome += parseFloat(t.amount);
-                    if(t.type === 'expense') monthExpenses += parseFloat(t.amount);
-                }
-            });
-    
-            dataString += `<br><strong>${monthName}:</strong><br>`;
-            dataString += `- Receitas: ${formatCurrency(monthIncome)}<br>`;
-            dataString += `- Despesas: ${formatCurrency(monthExpenses)}<br>`;
-            dataString += `- Saldo do Mês: ${formatCurrency(monthIncome - monthExpenses)}<br>`;
-        });
-    
-        dataString += "<br>--- Fim dos Dados Financeiros ---<br>";
+        dataString += "\n--- Fim dos Dados Financeiros ---\n";
         return dataString;
     }
 
@@ -2059,53 +1861,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         const persona = aiConfig.aiPersona || "";
         const personality = aiConfig.aiPersonality || "";
 
-        const baseSystemInstruction = `Você é um assistente financeiro com inteligência contextual, integrado a um aplicativo de finanças pessoais. Sua principal função é analisar dados financeiros do usuário, identificar padrões, propor melhorias e orientar com base em metas e sustentabilidade financeira. Agora você pode ADICIONAR, APAGAR, EDITAR e ENCONTRAR transações.
+        const baseSystemInstruction = `Você é um assistente financeiro especialista, agindo como o "cérebro" de um aplicativo de finanças. Sua única função é ANALISAR os dados financeiros fornecidos e responder às perguntas do usuário com base NESSES DADOS. Você não adiciona, edita ou apaga nada.
 
-<strong>Ferramentas Disponíveis:</strong>
-1.  <strong>addTransactionFromAI</strong>
-    *   Use para adicionar uma nova receita ou despesa.
-    *   <strong>Lógica Obrigatória:</strong> Antes de chamar, verifique se a categoria mencionada existe na lista de "Categorias e Caixinhas Cadastradas". Se a categoria **NÃO** existir, você **DEVE** perguntar ao usuário em qual categoria existente ele gostaria de registrar. Não invente categorias.
-    *   Parâmetros: "description", "amount", "categoryName", "type" ('income' ou 'expense'), "date" (opcional), "status" (opcional).
-
-2.  <strong>deleteTransactionFromAI</strong>
-    *   Use para apagar uma transação existente.
-    *   <strong>Lógica Obrigatória:</strong> Para evitar erros, sempre peça a descrição e o valor exato da transação a ser apagada. Se a ferramenta retornar um erro de ambiguidade (múltiplas transações encontradas), informe ao usuário e peça mais detalhes, como a data.
-    *   Parâmetros: "description", "amount".
-
-3.  <strong>editTransactionFromAI</strong>
-    *   Use para modificar uma transação existente.
-    *   <strong>Lógica Obrigatória:</strong> Primeiro, identifique a transação a ser editada pedindo a descrição e o valor original ao usuário. Depois, pergunte quais campos devem ser alterados (novo valor, nova descrição, etc.) e chame a ferramenta com os parâmetros originais e os novos.
-    *   Parâmetros: "originalDescription", "originalAmount", e pelo menos um dos novos campos "newDescription", "newAmount", "newCategoryName", "newDate", "newStatus".
-
-4.  <strong>findTransactionsFromAI</strong>
-    *   Use para buscar e listar transações quando o usuário perguntar algo como "quais foram meus gastos de hoje?" ou "liste minhas despesas com transporte".
-    *   <strong>Lógica Obrigatória:</strong> Use os parâmetros para filtrar a busca. Se o usuário não for específico, use o bom senso (ex: "hoje" significa a data atual). Retorne os resultados para o usuário.
-    *   Parâmetros: "date" (formato AAAA-MM-DD), "categoryName", "description".
-
-<strong>Instruções de Comportamento:</strong>
-*   <strong>Persona e Personalidade:</strong> Siga estritamente o papel e o tom definidos abaixo.
+<strong>REGRAS DE COMPORTAMENTO CRÍTICAS:</strong>
+1.  <strong>SEM SAUDAÇÕES:</strong> NÃO comece suas respostas com "Olá!", "Oi," ou qualquer outra saudação. Vá direto ao ponto.
+2.  <strong>BASEADO EM DADOS:</strong> Suas respostas devem ser 100% baseadas nos dados fornecidos na seção "DADOS FINANCEIROS COMPLETOS DO USUÁRIO". NUNCA invente informações.
+3.  <strong>INTELIGÊNCIA CONTEXTUAL:</strong> Use a "data de hoje" fornecida para determinar se as despesas pendentes estão atrasadas. Compare a data da transação com a data de hoje.
+4.  <strong>NÃO PEÇA INFORMAÇÕES:</strong> Você já tem todos os dados. NUNCA peça ao usuário para registrar transações ou fornecer informações que já estão na lista. Em vez disso, analise a lista que você recebeu. Se uma informação não está lá, diga que não a encontrou nos dados.
+5.  <strong>SEJA UM ANALISTA:</strong> Aja como um especialista. Identifique tendências, gastos excessivos, contas atrasadas e oportunidades de economia.
+6.  <strong>PERSONA:</strong> Siga estritamente o papel e o tom definidos abaixo.
     *   <strong>Personagem:</strong> ${persona}
     *   <strong>Personalidade:</strong> ${personality}
-*   <strong>Foco e Concisão:</strong> Seja direto, objetivo e claro. Responda APENAS ao que foi perguntado.
-*   <strong>Sem Repetição:</strong> NÃO repita os "Pontos de Atenção" (transações sem categoria, gastos sem orçamento) em todas as respostas. Mencione-os apenas se for diretamente relevante para a pergunta do usuário ou se ele pedir um conselho geral.
-*   <strong>Criação de Categorias:</strong> Você NUNCA deve criar uma categoria diretamente. Se o usuário pedir para criar uma, você deve guiá-lo a fazer isso manualmente no app, explicando as regras:
-    *   Pergunte o nome da categoria.
-    *   Pergunte o tipo: Receita, Despesa ou Caixinha.
-    *   Se for 'Despesa', pergunte se é 'Essencial' ou 'Não Essencial'.
-    *   Se for 'Caixinha', lembre o usuário que ele precisará definir um valor alvo.
-    *   Finalize dizendo: "Ok, para criar, vá em Mais Opções > Categorias e Caixinhas e adicione uma nova com essas informações."
-*   <strong>Análise de Dados:</strong> Você sempre tem acesso a um retrato atualizado das finanças do usuário. Use essas informações para gerar respostas contextualizadas e precisas. NUNCA invente valores.
-*   <strong>Formatação:</strong> É CRÍTICO e OBRIGATÓRIO que você use apenas HTML básico (<strong>, <br>, <ul>, <li>) para formatar. NUNCA, em hipótese alguma, use Markdown (*, **, _, #). O uso de Markdown quebrará a exibição para o usuário.
+7.  <strong>FORMATAÇÃO HTML:</strong> É CRÍTICO e OBRIGATÓRIO que você use apenas HTML básico (<strong>, <br>, <ul>, <li>) para formatar. NUNCA, em hipótese alguma, use Markdown (*, **, _, #). O uso de Markdown quebrará a exibição para o usuário.
 
 ---
-
-<strong>Glossário do app (obrigatório conhecer):</strong>
-- <strong>Caixinha:</strong> Meta de poupança onde o usuário guarda ou resgata dinheiro. O valor guardado não faz parte do saldo disponível.
-- <strong>Orçamento:</strong> Limite de gastos por categoria em um mês.
-
-<strong>Estilo de resposta:</strong>
-- <strong>Com iniciativa:</strong> Após respostas como “ok”, continue com algo útil e relevante.
-- <strong>Se faltarem dados:</strong> Avise o usuário e oriente a registrar as informações necessárias de forma educada.`;
+<strong>GLOSSÁRIO (obrigatório conhecer):</strong>
+- <strong>Caixinha:</strong> Meta de poupança. O dinheiro guardado aqui não faz parte do saldo geral disponível.
+- <strong>Orçamento:</strong> Limite de gastos para uma categoria específica no mês.
+- <strong>Despesa Pendente:</strong> Uma conta que ainda não foi paga. Você deve verificar a data dela contra a "data de hoje" para ver se está atrasada.
+---`;
 
 
         let currentFinancialData = "";
@@ -2125,78 +1899,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         const contentsPayload = [...chatHistory];
-        const userPromptWithData = `DATA_FINANCEIRA_DO_USUARIO_PARA_ANALISE:\n${currentFinancialData}\n\nMENSAGEM_DO_USUARIO:\n${userMessage}`;
+        const userPromptWithData = `DADOS FINANCEIROS COMPLETOS DO USUÁRIO:\n${lastFinancialDataString}\n\nMENSAGEM DO USUÁRIO:\n${userMessage}`;
         contentsPayload.push({ role: "user", parts: [{ text: userPromptWithData }] });
-
-        const tools = [{
-            "functionDeclarations": [
-                {
-                    "name": "addTransactionFromAI",
-                    "description": "Adiciona uma nova transação de receita ou despesa.",
-                    "parameters": {
-                        "type": "OBJECT",
-                        "properties": {
-                            "description": { "type": "STRING", "description": "A descrição da transação. Ex: 'Almoço'." },
-                            "amount": { "type": "NUMBER", "description": "O valor da transação. Ex: 50.25." },
-                            "categoryName": { "type": "STRING", "description": "O nome exato da categoria existente." },
-                            "type": { "type": "STRING", "enum": ["income", "expense"], "description": "O tipo da transação." },
-                            "date": { "type": "STRING", "description": "A data (AAAA-MM-DD). Padrão: hoje." },
-                            "status": { "type": "STRING", "enum": ["Pago", "Pendente", "Recebido"], "description": "O status. Padrão: 'Pago' ou 'Recebido'." }
-                        },
-                        "required": ["description", "amount", "categoryName", "type"]
-                    }
-                },
-                {
-                    "name": "deleteTransactionFromAI",
-                    "description": "Apaga uma transação existente.",
-                    "parameters": {
-                        "type": "OBJECT",
-                        "properties": {
-                            "description": { "type": "STRING", "description": "A descrição da transação a ser apagada." },
-                            "amount": { "type": "NUMBER", "description": "O valor exato da transação a ser apagada." }
-                        },
-                        "required": ["description", "amount"]
-                    }
-                },
-                {
-                    "name": "editTransactionFromAI",
-                    "description": "Edita uma transação existente.",
-                    "parameters": {
-                        "type": "OBJECT",
-                        "properties": {
-                            "originalDescription": { "type": "STRING", "description": "A descrição original da transação a ser editada." },
-                            "originalAmount": { "type": "NUMBER", "description": "O valor original da transação a ser editada." },
-                            "newDescription": { "type": "STRING", "description": "A nova descrição para a transação." },
-                            "newAmount": { "type": "NUMBER", "description": "O novo valor para a transação." },
-                            "newCategoryName": { "type": "STRING", "description": "O novo nome de categoria para a transação." },
-                            "newDate": { "type": "STRING", "description": "A nova data (AAAA-MM-DD) para a transação." },
-                            "newStatus": { "type": "STRING", "enum": ["Pago", "Pendente", "Recebido"], "description": "O novo status para a transação." }
-                        },
-                        "required": ["originalDescription", "originalAmount"]
-                    }
-                },
-                {
-                    "name": "findTransactionsFromAI",
-                    "description": "Encontra e lista transações com base em filtros.",
-                    "parameters": {
-                        "type": "OBJECT",
-                        "properties": {
-                            "date": { "type": "STRING", "description": "A data para filtrar (AAAA-MM-DD)." },
-                            "categoryName": { "type": "STRING", "description": "O nome da categoria para filtrar." },
-                            "description": { "type": "STRING", "description": "Um termo na descrição para filtrar." }
-                        },
-                        "required": []
-                    }
-                }
-            ]
-        }];
-    
-        const availableFunctions = { 
-            addTransactionFromAI,
-            deleteTransactionFromAI,
-            editTransactionFromAI,
-            findTransactionsFromAI
-        };
         
         const payload = {
             systemInstruction: { role: "system", parts: [{ text: baseSystemInstruction }] },
@@ -2212,51 +1916,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                 { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
                 { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
                 { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
-            ],
-            tools: tools,
-            tool_config: { "function_calling_config": { "mode": "AUTO" } }
+            ]
         };
 
         try {
             let result = await tryNextApiKey(payload, currentGeminiApiKeyIndex);
         
-            while (result && result.candidates && result.candidates[0].content.parts[0].functionCall) {
-                const candidate = result.candidates[0];
-                const part = candidate.content.parts[0];
-                const { name, args } = part.functionCall;
-                const functionToCall = availableFunctions[name];
-        
-                if (functionToCall) {
-                    const functionResult = await functionToCall(args);
-        
-                    // Adiciona o histórico da chamada da função e seu resultado
-                    payload.contents.push(candidate.content);
-                    payload.contents.push({
-                        role: "tool",
-                        parts: [{
-                            functionResponse: { name, response: { content: functionResult } }
-                        }]
-                    });
-        
-                    // Adiciona ao histórico do chat local também
-                    chatHistory.push(candidate.content);
-                    chatHistory.push({
-                        role: "tool",
-                        parts: [{ functionResponse: { name, response: { content: functionResult } } }]
-                    });
-        
-                    // Chama a API novamente com o resultado da função
-                    result = await tryNextApiKey(payload, currentGeminiApiKeyIndex);
-                } else {
-                    // Se a função não for encontrada, quebra o loop
-                    break;
-                }
-            }
-        
-            // Processa a resposta final de texto da IA
             if (result && result.candidates && result.candidates[0].content.parts[0].text) {
                 const finalResponse = result.candidates[0].content.parts[0].text;
                 appendMessage('ai', finalResponse);
+                // Adiciona a pergunta do usuário e a resposta do modelo ao histórico
+                chatHistory.push({ role: "user", parts: [{ text: userMessage }] }); // Salva a pergunta original, sem os dados
                 chatHistory.push({ role: "model", parts: [{ text: finalResponse }] });
             } else if (result.error) {
                 throw new Error(result.error.message || 'Erro desconhecido da API Gemini.');
@@ -2274,7 +1944,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             chatLoadingIndicator.classList.add('hidden');
             chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
             isSendingMessage = false; 
-            hasConsultedFinancialData = false;
+            // Não resetar hasConsultedFinancialData aqui, para manter os dados na conversa.
         }
     }
 
@@ -2299,15 +1969,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const insightPrompt = `
             Analise os dados financeiros a seguir.
-            Sua tarefa é fornecer um insight curto e acionável.
-            Foque em apenas UM ponto principal: o maior gasto, uma oportunidade de economia ou um alerta importante.
+            Sua tarefa é fornecer um insight CURTO e ACIONÁVEL em no máximo 3 frases.
+            Foque em apenas UM ponto principal: o maior gasto, uma oportunidade de economia ou um alerta importante (como contas pendentes atrasadas).
             
             REGRAS DE FORMATAÇÃO (OBRIGATÓRIO):
             1.  **Use APENAS tags HTML**.
             2.  Use <strong> para títulos ou alertas. Ex: <strong>Alerta de Gastos</strong>.
             3.  Use <br> para quebras de linha.
             4.  **NUNCA, EM HIPÓTESE ALGUMA, use Markdown (*, **, _, #, etc.)**. O uso de Markdown quebrará a interface.
-            5.  Seja direto e conciso. Máximo de 3 frases.
 
             DADOS PARA ANÁLISE:
             ${financialData}
