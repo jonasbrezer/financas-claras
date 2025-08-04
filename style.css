@@ -431,3 +431,25 @@ body.chat-active main {
     padding-top: 1rem; /* Dá um respiro acima dos controles */
     padding-bottom: 1px; /* Evita que a margem inferior do último elemento colapse */
 }
+
+/* NOVO: Estilos para o seletor de tipo de gráfico */
+.chart-type-button {
+    padding: 0.5rem 1rem; /* py-2 px-4 */
+    border: 1px solid #d1d5db; /* border-gray-300 */
+    border-radius: 0.5rem; /* rounded-lg */
+    background-color: #f9fafb; /* bg-gray-50 */
+    color: #374151; /* text-gray-700 */
+    font-weight: 500; /* font-medium */
+    transition: all 0.2s ease-in-out;
+    display: inline-flex;
+    align-items: center;
+}
+.chart-type-button:hover {
+    background-color: #f3f4f6; /* hover:bg-gray-100 */
+    border-color: #9ca3af; /* hover:border-gray-400 */
+}
+.chart-type-button.active {
+    background-color: var(--color-blue-primary);
+    color: white;
+    border-color: var(--color-blue-primary);
+}
