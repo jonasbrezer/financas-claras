@@ -46,11 +46,18 @@ let isGeminiApiReady = false;
 let hasConsultedFinancialData = false;
 let lastFinancialDataString = ''; 
 
-// NOVO: Flag para controlar a geração do insight inicial
+// Flag para controlar a geração do insight inicial
 let hasGeneratedInitialInsight = false;
 
-// NOVO: Variável para controlar o mês atual exibido
+// Variável para controlar o mês atual exibido
 let currentMonth = new Date(); // Inicializa com o mês atual
+
+// NOVO: Variável para controlar o mês do gráfico
+let chartMonth = new Date();
+
+// Variável global para a instância do gráfico de despesas
+let expenseChartInstance = null;
+let currentChartType = 'pie'; // Tipo de gráfico padrão
 
 // NOVAS PALETAS DE CORES PARA ATRIBUIÇÃO AUTOMÁTICA
 const INCOME_COLORS = ['#2ecc71', '#1abc9c', '#1dd1a1', '#55efc4', '#00b894', '#00d084', '#00e676', '#00ff6a'];
@@ -58,8 +65,6 @@ const ESSENTIAL_COLORS = ['#3498db', '#2980b9', '#8e44ad', '#34495e', '#6c5ce7',
 const NON_ESSENTIAL_COLORS = ['#e74c3c', '#e67e22', '#f1c40f', '#ff7675', '#d63031', '#fdcb6e', '#fab1a0', '#ffbe76'];
 const CAIXINHA_COLORS = ['#a29bfe', '#74b9ff', '#81ecec', '#ffeaa7', '#00cec9', '#6c5ce7', '#fd79a8', '#f0932b'];
 
-// Variável global para a instância do gráfico de despesas
-let expenseChartInstance = null;
 
 // --- Funções Auxiliares ---
 
@@ -102,6 +107,10 @@ function getCurrentMonthYYYYMM(date = new Date()) {
 
 // Helper para formatar o mês para exibição (ex: "Julho de 2025")
 function formatMonthDisplay(date) {
+    // Para o gráfico de evolução, a data pode ser um rótulo "Últimos 6 Meses"
+    if (currentChartType === 'line' && date === 'evolution') {
+        return "Evolução (6 meses)";
+    }
     const options = { month: 'long', year: 'numeric' };
     return date.toLocaleDateString('pt-BR', options);
 }
@@ -289,6 +298,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     const generateInsightsButton = document.getElementById('generate-insights-button');
     const insightsContentArea = document.getElementById('insights-content-area');
 
+    // Elementos dos Gráficos Interativos (NOVO)
+    const prevMonthChartButton = document.getElementById('prev-month-chart-button');
+    const nextMonthChartButton = document.getElementById('next-month-chart-button');
+    const currentMonthChartDisplay = document.getElementById('current-month-chart-display');
+    const chartTypeSelector = document.getElementById('chart-type-selector');
+
+
 
     // Elementos do Modal de Otimização de Orçamento
     const budgetOptimizationModal = document.getElementById('budget-optimization-modal');
@@ -382,17 +398,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                 categories = docSnap.data().items;
                 console.log("Categorias e Caixinhas carregadas do Firestore.");
                 renderCategories(categorySearchInput.value);
-                updateDashboardAndTransactionSummaries(); // Atualiza os resumos após carregar categorias
-                renderExpenseChart(); // Adicionar chamada para o gráfico
-                populateFilterCategories(); // ATUALIZADO: Popula o filtro de categorias
-            } else { // Se não existir ou estiver vazio, inicializa como array vazio
+                updateDashboardAndTransactionSummaries();
+                renderChart();
+                populateFilterCategories(); 
+            } else { 
                 categories = [];
                 console.log("Categorias e Caixinhas não encontradas ou vazias, inicializando como array vazio.");
-                saveCategories(); // Salva para criar o documento vazio se não existir
+                saveCategories(); 
                 renderCategories(categorySearchInput.value);
                 updateDashboardAndTransactionSummaries();
-                renderExpenseChart(); // Adicionar chamada para o gráfico
-                populateFilterCategories(); // ATUALIZADO: Popula o filtro de categorias
+                renderChart();
+                populateFilterCategories();
             }
         }, (error) => {
             console.error("Erro ao carregar Categorias do Firestore:", error);
@@ -404,10 +420,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 budgets = docSnap.data().items;
                 console.log("Orçamentos carregados do Firestore.");
                 renderBudgets();
-            } else { // Se não existir ou estiver vazio, inicializa como array vazio
+            } else { 
                 budgets = [];
                 console.log("Orçamentos não encontrados ou vazios, inicializando como array vazio.");
-                saveBudgets(); // Salva para criar o documento vazio se não existir
+                saveBudgets(); 
                 renderBudgets();
             }
         }, (error) => {
@@ -443,16 +459,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Listener para Transações - Usa getUserCollectionRef
         const transactionsColRef = getUserCollectionRef('transactions');
-        if (transactionsColRef) { // Verifica se a referência foi criada com sucesso
+        if (transactionsColRef) { 
             onSnapshot(query(transactionsColRef, orderBy('date', 'desc')), (querySnapshot) => {
                 transactions = [];
                 querySnapshot.forEach((doc) => {
                     transactions.push({ id: doc.id, ...doc.data() });
                 });
                 console.log("Transações carregadas do Firestore.");
-                renderTransactions(); // Renderiza transações para o currentMonth
-                updateDashboardAndTransactionSummaries(); // Atualiza os resumos para o currentMonth
-                renderExpenseChart(); // Adicionar chamada para o gráfico
+                renderTransactions();
+                updateDashboardAndTransactionSummaries();
+                renderChart();
             }, (error) => {
                 console.error("Erro ao carregar Transações do Firestore:", error);
             });
@@ -684,7 +700,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         } 
         else if (pageId === 'dashboard') {
             updateDashboardAndTransactionSummaries();
-            renderExpenseChart(); // Garante que o gráfico é renderizado ao voltar para o dashboard
+            chartMonth = new Date(); // Reseta o mês do gráfico
+            updateChartMonthDisplay();
+            renderChart();
             if (!hasGeneratedInitialInsight) {
                 generateFinancialInsights(); // Gera o insight ao entrar na página
                 hasGeneratedInitialInsight = true; // Marca que o insight inicial foi gerado
@@ -1585,8 +1603,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateMonthDisplay();
         renderTransactions();
         updateDashboardAndTransactionSummaries();
-        renderExpenseChart(); // Atualiza o gráfico
-        renderBudgets(); // Atualiza os orçamentos
+        renderBudgets();
     });
 
     nextMonthButton.addEventListener('click', () => {
@@ -1594,8 +1611,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateMonthDisplay();
         renderTransactions();
         updateDashboardAndTransactionSummaries();
-        renderExpenseChart(); // Atualiza o gráfico
-        renderBudgets(); // Atualiza os orçamentos
+        renderBudgets();
     });
 
 
@@ -2504,18 +2520,37 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
 
-    // Função para renderizar o gráfico de despesas
-    function renderExpenseChart() {
+    // --- Funções de Gráfico (REESTRUTURADO) ---
+    function updateChartMonthDisplay() {
+        const displayValue = currentChartType === 'line' ? 'evolution' : chartMonth;
+        currentMonthChartDisplay.textContent = formatMonthDisplay(displayValue);
+    }
+    
+    function renderChart() {
+        switch (currentChartType) {
+            case 'pie':
+                renderExpensePieChart();
+                break;
+            case 'bar':
+                renderIncomeVsExpenseBarChart();
+                break;
+            case 'line':
+                renderBalanceEvolutionLineChart();
+                break;
+            default:
+                renderExpensePieChart();
+        }
+        updateChartMonthDisplay();
+    }
+    
+    function renderExpensePieChart() {
         const ctx = document.getElementById('expense-chart').getContext('2d');
-        
-        // Agrupa despesas do mês atual por categoria
         const expensesByCategory = transactions
-            .filter(t => t.type === 'expense' && t.date.startsWith(getCurrentMonthYYYYMM(currentMonth)) && (t.status === 'Pago' || t.status === 'Recebido' || t.status === 'Confirmado')) // Filtra pelo currentMonth
+            .filter(t => t.type === 'expense' && t.date.startsWith(getCurrentMonthYYYYMM(chartMonth)) && (t.status === 'Pago' || t.status === 'Recebido' || t.status === 'Confirmado'))
             .reduce((acc, t) => {
                 const category = categories.find(c => c.id === t.categoryId);
                 const categoryName = category ? category.name : 'Sem Categoria';
-                const categoryColor = category ? category.color : '#808080'; // Cor padrão para "Sem Categoria"
-                                        
+                const categoryColor = category ? category.color : '#808080';
                 if (!acc[categoryName]) {
                     acc[categoryName] = { total: 0, color: categoryColor };
                 }
@@ -2527,19 +2562,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         const data = labels.map(label => expensesByCategory[label].total);
         const backgroundColors = labels.map(label => expensesByCategory[label].color);
 
-        // Destrói a instância anterior do gráfico se ela existir
         if (expenseChartInstance) {
             expenseChartInstance.destroy();
         }
-        
+
         if (labels.length === 0) {
-            // Mostra uma mensagem se não houver dados
-            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height); // Limpa o canvas
+            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
             ctx.font = '16px "Inter", sans-serif';
-            ctx.fillStyle = '#6B7280'; // Cor do texto cinza
+            ctx.fillStyle = '#6B7280';
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
-            ctx.fillText('Sem dados de despesa para exibir neste mês.', ctx.canvas.width / 2, ctx.canvas.height / 2);
+            ctx.fillText('Sem despesas pagas para exibir neste mês.', ctx.canvas.width / 2, ctx.canvas.height / 2);
             return;
         }
 
@@ -2559,27 +2592,202 @@ document.addEventListener('DOMContentLoaded', async () => {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: {
-                        position: 'bottom',
-                    },
+                    legend: { position: 'bottom' },
                     tooltip: {
                         callbacks: {
-                            label: function(context) {
-                                let label = context.label || '';
-                                if (label) {
-                                    label += ': ';
-                                }
-                                if (context.parsed !== null) {
-                                    label += formatCurrency(context.parsed);
-                                }
-                                return label;
-                            }
+                            label: (context) => `${context.label || ''}: ${formatCurrency(context.parsed)}`
                         }
                     }
                 }
             }
         });
     }
+
+    function renderIncomeVsExpenseBarChart() {
+        const ctx = document.getElementById('expense-chart').getContext('2d');
+        const monthFilter = getCurrentMonthYYYYMM(chartMonth);
+
+        const totalIncome = transactions
+            .filter(t => t.type === 'income' && t.date.startsWith(monthFilter) && (t.status === 'Recebido' || t.status === 'Confirmado'))
+            .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+
+        const totalExpense = transactions
+            .filter(t => t.type === 'expense' && t.date.startsWith(monthFilter) && (t.status === 'Pago' || t.status === 'Confirmado'))
+            .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+
+        if (expenseChartInstance) {
+            expenseChartInstance.destroy();
+        }
+        
+        expenseChartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['Receitas', 'Despesas'],
+                datasets: [{
+                    label: 'Total no Mês',
+                    data: [totalIncome, totalExpense],
+                    backgroundColor: [
+                        'rgba(75, 192, 192, 0.6)',
+                        'rgba(255, 99, 132, 0.6)'
+                    ],
+                    borderColor: [
+                        'rgba(75, 192, 192, 1)',
+                        'rgba(255, 99, 132, 1)'
+                    ],
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => `${context.label || ''}: ${formatCurrency(context.raw)}`
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: (value) => formatCurrency(value)
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    function renderBalanceEvolutionLineChart() {
+        const ctx = document.getElementById('expense-chart').getContext('2d');
+        const balances = [];
+        const labels = [];
+        let cumulativeBalance = 0;
+    
+        // 1. Calcular o saldo inicial antes dos últimos 6 meses
+        const sixMonthsAgo = new Date();
+        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+        const sixMonthsAgoYYYYMM = getCurrentMonthYYYYMM(sixMonthsAgo);
+    
+        let initialBalance = 0;
+        transactions.forEach(t => {
+            const transactionMonth = t.date.substring(0, 7);
+            if (transactionMonth < sixMonthsAgoYYYYMM && (t.status === 'Pago' || t.status === 'Recebido' || t.status === 'Confirmado')) {
+                if (t.type === 'income') initialBalance += parseFloat(t.amount);
+                if (t.type === 'expense') initialBalance -= parseFloat(t.amount);
+                if (t.type === 'caixinha') {
+                    if (t.transactionType === 'deposit') initialBalance -= parseFloat(t.amount);
+                    if (t.transactionType === 'withdraw') initialBalance += parseFloat(t.amount);
+                }
+            }
+        });
+    
+        cumulativeBalance = initialBalance;
+    
+        // 2. Calcular o saldo final para cada um dos últimos 6 meses
+        for (let i = 5; i >= 0; i--) {
+            const date = new Date();
+            date.setMonth(date.getMonth() - i);
+            const monthYYYYMM = getCurrentMonthYYYYMM(date);
+            
+            const monthIncome = transactions
+                .filter(t => t.date.startsWith(monthYYYYMM) && t.type === 'income' && (t.status === 'Recebido' || t.status === 'Confirmado'))
+                .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+            
+            const monthExpense = transactions
+                .filter(t => t.date.startsWith(monthYYYYMM) && t.type === 'expense' && (t.status === 'Pago' || t.status === 'Confirmado'))
+                .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+
+            const monthCaixinhaNet = transactions
+                .filter(t => t.date.startsWith(monthYYYYMM) && t.type === 'caixinha' && t.status === 'Confirmado')
+                .reduce((sum, t) => {
+                    if (t.transactionType === 'deposit') return sum - parseFloat(t.amount);
+                    if (t.transactionType === 'withdraw') return sum + parseFloat(t.amount);
+                    return sum;
+                }, 0);
+    
+            cumulativeBalance += monthIncome - monthExpense + monthCaixinhaNet;
+            balances.push(cumulativeBalance);
+            labels.push(date.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }));
+        }
+
+        if (expenseChartInstance) {
+            expenseChartInstance.destroy();
+        }
+
+        expenseChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Saldo Acumulado',
+                    data: balances,
+                    fill: false,
+                    borderColor: 'rgb(75, 192, 192)',
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: (context) => `Saldo: ${formatCurrency(context.raw)}`
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        ticks: {
+                            callback: (value) => formatCurrency(value)
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    // --- Listeners do Gráfico Interativo ---
+    chartTypeSelector.addEventListener('click', (e) => {
+        const button = e.target.closest('.chart-type-button');
+        if (!button) return;
+
+        currentChartType = button.dataset.chartType;
+
+        // Atualiza a classe 'active' nos botões
+        document.querySelectorAll('.chart-type-button').forEach(btn => btn.classList.remove('active'));
+        button.classList.add('active');
+        
+        // Habilita/desabilita a navegação de mês
+        const monthNavDisabled = currentChartType === 'line';
+        prevMonthChartButton.disabled = monthNavDisabled;
+        nextMonthChartButton.disabled = monthNavDisabled;
+        if(monthNavDisabled) {
+             prevMonthChartButton.classList.add('opacity-50', 'cursor-not-allowed');
+             nextMonthChartButton.classList.add('opacity-50', 'cursor-not-allowed');
+        } else {
+             prevMonthChartButton.classList.remove('opacity-50', 'cursor-not-allowed');
+             nextMonthChartButton.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+
+        renderChart();
+    });
+    
+    prevMonthChartButton.addEventListener('click', () => {
+        chartMonth.setMonth(chartMonth.getMonth() - 1);
+        renderChart();
+    });
+
+    nextMonthChartButton.addEventListener('click', () => {
+        chartMonth.setMonth(chartMonth.getMonth() + 1);
+        renderChart();
+    });
+
 
     // --- Funções de Notificação (Toast) ---
     function showToast(message, type = 'info') {
