@@ -3093,7 +3093,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // PWA: Registra o Service Worker
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
-            navigator.serviceWorker.register('/service-worker.js')
+            navigator.serviceWorker.register('/financas-claras/service-worker.js', { scope: '/financas-claras/' })
                 .then(registration => {
                     console.log('Service Worker registrado com sucesso:', registration);
                 })
@@ -3102,7 +3102,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 });
         });
     }
-
 });
 
     
