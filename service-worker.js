@@ -55,3 +55,18 @@ self.addEventListener('activate', event => {
     })
   );
 });
+
+// Listener para eventos de push (notificações)
+self.addEventListener('push', event => {
+  const data = event.data.json();
+  const options = {
+    body: data.body,
+    icon: 'https://placehold.co/192x192.png',
+    badge: 'https://placehold.co/96x96.png'
+  };
+  event.waitUntil(
+    self.registration.showNotification(data.title, options)
+  );
+});
+
+    
