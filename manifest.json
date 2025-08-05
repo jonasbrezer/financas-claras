@@ -2,8 +2,10 @@
   "name": "Finanças Claras",
   "short_name": "Finanças",
   "description": "Seu assistente pessoal para controle financeiro, com insights de IA.",
+  "id": "/?source=pwa",
   "start_url": "/",
   "display": "fullscreen",
+  "display_override": ["window-controls-overlay"],
   "background_color": "#F0F5FA",
   "theme_color": "#3383FF",
   "orientation": "portrait-primary",
@@ -21,5 +23,9 @@
       "purpose": "maskable"
     }
   ],
+  "screenshots": [],
+  "launch_handler": {
+    "client_mode": ["navigate-existing", "auto"]
+  },
   "lang": "pt"
 }
