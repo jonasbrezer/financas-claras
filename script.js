@@ -1,3107 +1,1583 @@
+// Importar funções de bibliotecas externas (simulação para um ambiente modular)
+// Em um ambiente real, você usaria importações de módulo (ESM).
+// Ex: import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 
-// Importa os módulos necessários do Firebase
-import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-import { getFirestore, doc, setDoc, getDoc, collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, writeBatch, where, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+// ================================================================================================
+// CONFIGURAÇÃO E INICIALIZAÇÃO
+// ================================================================================================
 
-// Variáveis globais do ambiente Canvas (preenchidas em tempo de execução)
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-// ATENÇÃO: Firebase Config agora está hardcoded com as credenciais fornecidas pelo usuário.
+// Configuração do Firebase
+// NOTA: Substitua com suas próprias credenciais do Firebase.
 const firebaseConfig = {
-    apiKey: "AIzaSyBEuFW_VQEx_smJUOxCsF0Jug_lnzUA2aw",
-    authDomain: "offline-d2e68.firebaseapp.com",
-    projectId: "offline-d2e68",
-    storageBucket: "offline-d2e68.firebasestorage.app",
-    messagingSenderId: "524684058670",
-    appId: "1:524684058670:web:5141130aee53e059cc7fbf"
-};
-const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-
-// Instâncias do Firebase
-let app;
-let db;
-let auth;
-let userId = null; 
-let isAuthReady = false; 
-
-// Arrays para armazenar os dados do usuário
-let categories = []; 
-let transactions = [];
-let budgets = []; 
-
-// Configurações da IA (ATUALIZADO)
-let aiConfig = {
-    aiPersona: "", 
-    aiPersonality: ""
+    apiKey: "SUA_API_KEY", // Substitua
+    authDomain: "SEU_AUTH_DOMAIN", // Substitua
+    projectId: "SEU_PROJECT_ID", // Substitua
+    storageBucket: "SEU_STORAGE_BUCKET", // Substitua
+    messagingSenderId: "SEU_MESSAGING_SENDER_ID", // Substitua
+    appId: "SEU_APP_ID" // Substitua
 };
 
-// Múltiplas chaves de API Gemini (ARRAY)
-let geminiApiKeys = []; 
-let currentGeminiApiKeyIndex = 0; // Índice da chave de API atualmente em uso
-let chatHistory = []; 
-let isSendingMessage = false;
-let isGeminiApiReady = false; 
+// Inicializa o Firebase
+// const app = initializeApp(firebaseConfig);
+// const auth = getAuth(app);
+// const db = getFirestore(app);
 
-// Flag e armazenamento para dados financeiros para a IA
-let hasConsultedFinancialData = false;
-let lastFinancialDataString = ''; 
-
-// Flag para controlar a geração do insight inicial
-let hasGeneratedInitialInsight = false;
-
-// Variável para controlar o mês atual exibido
-let currentMonth = new Date(); // Inicializa com o mês atual
-
-// NOVO: Variável para controlar o mês do gráfico
-let chartMonth = new Date();
-
-// Variável global para a instância do gráfico de despesas
-let expenseChartInstance = null;
-let currentChartType = 'pie'; // Tipo de gráfico padrão
-
-// NOVAS PALETAS DE CORES PARA ATRIBUIÇÃO AUTOMÁTICA
-const INCOME_COLORS = ['#2ecc71', '#1abc9c', '#1dd1a1', '#55efc4', '#00b894', '#00d084', '#00e676', '#00ff6a'];
-const ESSENTIAL_COLORS = ['#3498db', '#2980b9', '#8e44ad', '#34495e', '#6c5ce7', '#0984e3', '#a29bfe', '#636e72'];
-const NON_ESSENTIAL_COLORS = ['#e74c3c', '#e67e22', '#f1c40f', '#ff7675', '#d63031', '#fdcb6e', '#fab1a0', '#ffbe76'];
-const CAIXINHA_COLORS = ['#a29bfe', '#74b9ff', '#81ecec', '#ffeaa7', '#00cec9', '#6c5ce7', '#fd79a8', '#f0932b'];
-
-
-// --- Funções Auxiliares ---
-
-// Função para gerar UUIDs (IDs únicos)
-function generateUUID() {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-        var r = Math.random() * 16 | 0,
-            v = c == 'x' ? r : (r & 0x3 | 0x8);
-        return v.toString(16);
-    });
-}
-
-// Formata um valor numérico para moeda brasileira
-function formatCurrency(value) {
-    return parseFloat(value).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
-
-// Limpa e formata o input de valor para moeda brasileira
-function formatCurrencyInput(inputElement) {
-    let value = inputElement.value.replace(/\D/g, ''); 
-    
-    if (value.length === 0) {
-        inputElement.value = '';
-        return;
-    }
-
-    value = (parseInt(value, 10) / 100).toFixed(2); 
-    value = value.replace('.', ','); 
-    value = value.replace(/(\d)(?=(\d{3})+(?!\d))/g, '$1.'); 
-
-    inputElement.value = value;
-}
-
-// Helper para pegar o mês atual no formato 'YYYY-MM'
-function getCurrentMonthYYYYMM(date = new Date()) {
-    const year = date.getFullYear();
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    return `${year}-${month}`;
-}
-
-// Helper para formatar o mês para exibição (ex: "Julho de 2025")
-function formatMonthDisplay(date) {
-    // Para o gráfico de evolução, a data pode ser um rótulo "Últimos 6 Meses"
-    if (currentChartType === 'line' && date === 'evolution') {
-        return "Evolução (6 meses)";
-    }
-    const options = { month: 'long', year: 'numeric' };
-    return date.toLocaleDateString('pt-BR', options);
-}
-
-// JavaScript para simular a navegação entre as seções/páginas
-document.addEventListener('DOMContentLoaded', async () => {
-    // Elementos da Tela de Splash
-    const splashScreen = document.getElementById('splash-screen');
-    const splashImage = document.getElementById('splash-image');
-    const continueToAppButton = document.getElementById('continue-to-app-button');
-
-    // Elementos da Tela de Login
-    const loginScreen = document.getElementById('login-screen');
-    const loginForm = document.getElementById('login-form');
-    const loginEmailInput = document.getElementById('login-email');
-    const loginPasswordInput = document.getElementById('login-password');
-    const loginErrorMessage = document.getElementById('login-error-message');
-    const appContent = document.getElementById('app-content');
-    const bodyEl = document.querySelector('body');
-
-    // Elementos do Modal de Confirmação Genérico
-    const confirmationModal = document.getElementById('confirmation-modal');
-    const confirmationModalTitle = document.getElementById('confirmation-modal-title');
-    const confirmationModalMessage = document.getElementById('confirmation-modal-message');
-    const cancelConfirmationButton = document.getElementById('cancel-confirmation-button');
-    const confirmActionButton = document.getElementById('confirm-action-button');
-    let confirmActionCallback = null; // Função a ser executada ao confirmar
-
-    // Seleciona todos os elementos que podem atuar como links de navegação.
-    const navLinks = document.querySelectorAll('.nav-link, .mobile-nav-item, [data-page]');
-    const pageSections = document.querySelectorAll('.page-section');
-    const fabButton = document.getElementById('fab-add-transaction');
-
-    // URLs das imagens de capa
-    const splashImages = [
-        'https://github.com/jonasbrezer/financas-claras/blob/main/Capa01.png?raw=true',
-        'https://github.com/jonasbrezer/financas-claras/blob/main/Capa02.png?raw=true',
-        'https://github.com/jonasbrezer/financas-claras/blob/main/Capa03.png?raw=true',
-        'https://github.com/jonasbrezer/financas-claras/blob/main/Capa04.png?raw=true',
-        'https://github.com/jonasbrezer/financas-claras/blob/main/Capa05.png?raw=true'
-    ];
-
-
-    // Função para exibir a tela de splash
-    function showSplashScreen() {
-        const randomIndex = Math.floor(Math.random() * splashImages.length);
-        splashImage.src = splashImages[randomIndex];
-        splashScreen.classList.remove('hidden');
-    }
-
-    // Função para exibir um modal de confirmação customizado
-    function showConfirmationModal(title, message, callback) {
-        confirmationModalTitle.textContent = title;
-        confirmationModalMessage.textContent = message;
-        confirmActionCallback = callback;
-        confirmationModal.classList.add('active');
-    }
-
-    // Função para fechar o modal de confirmação
-    function closeConfirmationModal() {
-        confirmationModal.classList.remove('active');
-        confirmActionCallback = null; // Limpa o callback
-    }
-
-    // Event listener para o botão de confirmar no modal de confirmação
-    confirmActionButton.addEventListener('click', () => {
-        if (confirmActionCallback) {
-            confirmActionCallback();
-        }
-        closeConfirmationModal();
-    });
-
-    // Event listener para o botão de cancelar no modal de confirmação
-    cancelConfirmationButton.addEventListener('click', closeConfirmationModal);
-
-    // --- Funções de Persistência (Firebase Firestore) ---
-    
-    // Função para obter referência a uma coleção (para múltiplos documentos, ex: transações)
-    const getUserCollectionRef = (collectionName) => {
-        if (!userId) {
-            console.error("userId não está definido. Não é possível criar referência de coleção.");
-            return null;
-        }
-        // O caminho completo garante que os dados de cada usuário fiquem isolados e seguros.
-        return collection(db, `artifacts/${appId}/users/${userId}/${collectionName}`);
-    };
-
-    // Função para obter referência a um documento específico (para dados salvos como um único doc)
-    const getUserDocumentRef = (collectionName, docName) => {
-        if (!userId) {
-            console.error("userId não está definido. Não é possível criar referência de documento.");
-            return null;
-        }
-        // O caminho completo garante que os dados de cada usuário fiquem isolados e seguros.
-        return doc(db, `artifacts/${appId}/users/${userId}/${collectionName}/${docName}`);
-    };
-
-
-    // Elementos do Chat
-    const chatMessagesDiv = document.getElementById('chat-messages');
-    const chatInput = document.getElementById('chat-input');
-    const sendButton = document.getElementById('chat-send-button'); 
-    const chatLoadingIndicator = document.getElementById('chat-loading-indicator');
-    const refreshChatDataButton = document.getElementById('refresh-chat-data-button');
-    const clearChatButton = document.getElementById('clear-chat-button');
-    const activeApiKeyIndicator = document.getElementById('active-api-key-indicator');
-    const chatBackButton = document.getElementById('chat-back-button'); // NOVO: Botão Voltar
-
-    // Elementos das Categorias
-    const addCategoryButton = document.getElementById('add-new-category-button');
-    const categoryListContainer = document.getElementById('category-list-container');
-    const categoryModal = document.getElementById('category-modal');
-    const closeCategoryModalButton = document.getElementById('close-category-modal');
-    const cancelCategoryButton = document.getElementById('cancel-category-button');
-    const categoryForm = document.getElementById('category-form');
-    const categoryIdInput = document.getElementById('category-id');
-    const categoryNameInput = document.getElementById('category-name');
-    const categoryModalTitle = document.getElementById('category-modal-title');
-    const categoryTypeRadios = document.querySelectorAll('input[name="category-type"]'); 
-    const priorityField = document.getElementById('priority-field'); 
-    const categoryPriorityRadios = document.querySelectorAll('input[name="category-priority"]'); 
-    const categorySearchInput = document.getElementById('category-search-input');
-    // NOVO: Elementos para o campo de Valor Alvo da Categoria/Caixinha
-    const targetAmountField = document.getElementById('target-amount-field');
-    const categoryTargetAmountInput = document.getElementById('category-target-amount');
-
-
-    // Elementos das Transações
-    const transactionModal = document.getElementById('transaction-modal');
-    const closeTransactionModalButton = document.getElementById('close-transaction-modal');
-    const transactionForm = document.getElementById('transaction-form');
-    const transactionIdInput = document.getElementById('transaction-id');
-    const transactionDescriptionInput = document.getElementById('transaction-description');
-    const transactionAmountInput = document.getElementById('transaction-amount');
-    const transactionDateInput = document.getElementById('transaction-date');
-    const suggestCategoryButton = document.getElementById('suggest-category-button');
-    const addCategoryQuickButton = document.getElementById('add-category-quick-button'); // NOVO BOTÃO
-    // Os radios de transaction-type agora são ocultos e controlados pelos botões da Etapa 1
-    const transactionTypeRadios = document.querySelectorAll('input[name="transaction-type"]'); 
-    const transactionCategorySelect = document.getElementById('transaction-category');
-    // ATUALIZADO: Removido o select, agora é um div para botões de rádio
-    const transactionStatusOptionsContainer = document.getElementById('transaction-status-options'); 
-    const step2Title = document.getElementById('step-2-title'); // Título da Etapa 2
-    const noTransactionsMessage = document.getElementById('no-transactions-message');
-    const transactionsListContainer = document.getElementById('transactions-list-container');
-    // NOVO: Campo de número de parcelas
-    const transactionInstallmentsInput = document.getElementById('transaction-installments');
-    const installmentsField = document.getElementById('installments-field');
-    // NOVO: Elementos de Navegação por Mês
-    const prevMonthButton = document.getElementById('prev-month-button');
-    const nextMonthButton = document.getElementById('next-month-button');
-    const currentMonthDisplay = document.getElementById('current-month-display');
-    // NOVO: Elementos de Filtro de Transações
-    const filterTypeSelect = document.getElementById('filter-type');
-    const filterCategorySelect = document.getElementById('filter-category');
-    const filterStatusSelect = document.getElementById('filter-status');
-    const resetFiltersButton = document.getElementById('reset-filters-button');
-
-
-
-    // ATUALIZADO: Variáveis de controle para o fluxo multi-etapas do modal de transação
-    let currentStep = 1;
-    const totalSteps = 3; // Reduzido de 4 para 3
-    const transactionSteps = [
-        document.getElementById('transaction-step-1'),
-        document.getElementById('transaction-step-2'),
-        document.getElementById('transaction-step-3')
-    ];
-
-
-    // Elementos do Dashboard (agora com os resumos principais)
-    const dashboardCurrentBalance = document.getElementById('dashboard-current-balance');
-    const dashboardPaidExpenses = document.getElementById('dashboard-paid-expenses');
-    const dashboardPendingExpenses = document.getElementById('dashboard-pending-expenses');
-    const dashboardTotalCaixinhasSaved = document.getElementById('dashboard-total-caixinhas-saved');
-
-
-    // Elementos do Orçamento
-    const configureBudgetButton = document.getElementById('configure-budget-button'); 
-    const optimizeBudgetButton = document.getElementById('optimize-budget-button'); 
-    const budgetListContainer = document.getElementById('budget-list-container');
-    const noBudgetsMessage = document.getElementById('no-budgets-message');
-
-    // Elementos dos Insights (Reestruturado)
-    const generateInsightsButton = document.getElementById('generate-insights-button');
-    const insightsContentArea = document.getElementById('insights-content-area');
-
-    // Elementos dos Gráficos Interativos (NOVO)
-    const prevMonthChartButton = document.getElementById('prev-month-chart-button');
-    const nextMonthChartButton = document.getElementById('next-month-chart-button');
-    const currentMonthChartDisplay = document.getElementById('current-month-chart-display');
-    const chartTypeSelector = document.getElementById('chart-type-selector');
-
-
-
-    // Elementos do Modal de Otimização de Orçamento
-    const budgetOptimizationModal = document.getElementById('budget-optimization-modal');
-    const closeBudgetOptimizationModalButton = document.getElementById('close-budget-optimization-modal');
-    const closeBudgetOptimizationButton = document.getElementById('close-budget-optimization-button');
-    const budgetOptimizationContent = document.getElementById('budget-optimization-content');
-    const budgetOptimizationLoadingIndicator = document.getElementById('budget-optimization-loading-indicator');
-    const budgetOptimizationText = document.getElementById('budget-optimization-text');
-
-
-    // Elementos do Modal de Chave de API (ATUALIZADO PARA MÚLTIPLAS CHAVES)
-    const apiManagementLink = document.querySelector('[data-page="api-management"]');
-    const apiKeysModal = document.getElementById('api-keys-modal');
-    const closeApiKeysModalButton = document.getElementById('close-api-keys-modal');
-    const modalApiKeyInputs = [ // Array de inputs para as 5 chaves
-        document.getElementById('modal-api-key-1'),
-        document.getElementById('modal-api-key-2'),
-        document.getElementById('modal-api-key-3'),
-        document.getElementById('modal-api-key-4'),
-        document.getElementById('modal-api-key-5')
-    ];
-    const saveApiKeysModalButton = document.getElementById('save-api-keys-modal-button');
-    const apiModalStatusMessageDiv = document.getElementById('api-modal-status-message');
-    const apiModalMessageText = document.getElementById('api-modal-message-text');
-
-    // Elementos da Configuração de IA (ATUALIZADOS)
-    const aiPersonaInput = document.getElementById('ai-persona');
-    const aiPersonalityInput = document.getElementById('ai-personality');
-    const saveAiConfigButton = document.getElementById('save-ai-config-button');
-    const aiConfigStatusMessage = document.getElementById('ai-config-status-message');
-
-
-    // Elementos do novo Modal de Orçamento
-    const budgetModal = document.getElementById('budget-modal');
-    const closeBudgetModalButton = document.getElementById('close-budget-modal');
-    const cancelBudgetButton = document.getElementById('cancel-budget-button');
-    const budgetForm = document.getElementById('budget-form');
-    const budgetIdInput = document.getElementById('budget-id');
-    const budgetCategorySelect = document.getElementById('budget-category');
-    const budgetAmountInput = document.getElementById('budget-amount');
-    const budgetModalTitle = document.getElementById('budget-modal-title');
-
-
-    // Botões de Sair
-    const logoutButtonDesktop = document.getElementById('logout-button-desktop');
-    const logoutButtonMobile = document.getElementById('logout-button-mobile');
-    
-    // NOVO: Elementos do Modal de Otimização de Categorias
-    const optimizeCategoriesButton = document.getElementById('optimize-categories-button');
-    const categoryOptimizationModal = document.getElementById('category-optimization-modal');
-    const closeCategoryOptimizationModalButton = document.getElementById('close-category-optimization-modal');
-    const closeCategoryOptimizationButton = document.getElementById('close-category-optimization-button');
-    const categoryOptimizationContent = document.getElementById('category-optimization-content');
-    const categoryOptimizationLoadingIndicator = document.getElementById('category-optimization-loading-indicator');
-    const categoryOptimizationSuggestions = document.getElementById('category-optimization-suggestions');
-
-
-    // Carrega todos os dados do Firestore
-    async function loadAllDataFromFirestore() {
-        if (!isAuthReady || !userId) {
-            console.warn("Autenticação não pronta ou userId ausente para carregar dados do Firestore. Abortando load.");
-            return;
-        }
-        console.log("loadAllDataFromFirestore called. userId:", userId, "isAuthReady:", isAuthReady);
-
-        // Listener para AI Config - Usa getUserDocumentRef
-        onSnapshot(getUserDocumentRef('settings', 'aiConfig'), (docSnap) => {
-            if (docSnap.exists()) {
-                const data = docSnap.data();
-                aiConfig.aiPersona = data.aiPersona || "Você é um educador financeiro especialista...";
-                aiConfig.aiPersonality = data.aiPersonality || "";
-            } else {
-                 aiConfig.aiPersona = "Você é um educador financeiro especialista...";
-                 aiConfig.aiPersonality = "";
-            }
-            // Popula os campos da UI com os valores carregados ou padrão
-            aiPersonaInput.value = aiConfig.aiPersona;
-            aiPersonalityInput.value = aiConfig.aiPersonality;
-            
-            if (!docSnap.exists()) {
-                console.log("AI Config não encontrada, salvando padrão.");
-                saveAiConfig(); // Salva a configuração padrão se não existir
-            }
-        }, (error) => {
-            console.error("Erro ao carregar AI Config do Firestore:", error);
-        });
-
-        // Listener para Categorias (que agora incluem Caixinhas) - Usa getUserDocumentRef
-        onSnapshot(getUserDocumentRef('categories', 'userCategories'), (docSnap) => {
-            if (docSnap.exists() && docSnap.data().items) {
-                categories = docSnap.data().items;
-                console.log("Categorias e Caixinhas carregadas do Firestore.");
-                renderCategories(categorySearchInput.value);
-                updateDashboardAndTransactionSummaries();
-                renderChart();
-                populateFilterCategories(); 
-            } else { 
-                categories = [];
-                console.log("Categorias e Caixinhas não encontradas ou vazias, inicializando como array vazio.");
-                saveCategories(); 
-                renderCategories(categorySearchInput.value);
-                updateDashboardAndTransactionSummaries();
-                renderChart();
-                populateFilterCategories();
-            }
-        }, (error) => {
-            console.error("Erro ao carregar Categorias do Firestore:", error);
-        });
-
-        // Listener para Orçamentos - Usa getUserDocumentRef
-        onSnapshot(getUserDocumentRef('budgets', 'userBudgets'), (docSnap) => {
-            if (docSnap.exists() && docSnap.data().items) {
-                budgets = docSnap.data().items;
-                console.log("Orçamentos carregados do Firestore.");
-                renderBudgets();
-            } else { 
-                budgets = [];
-                console.log("Orçamentos não encontrados ou vazios, inicializando como array vazio.");
-                saveBudgets(); 
-                renderBudgets();
-            }
-        }, (error) => {
-            console.error("Erro ao carregar Orçamentos do Firestore:", error);
-        });
-
-        // Listener para Chaves de API Gemini (ARRAY) - NOVO
-        onSnapshot(getUserDocumentRef('settings', 'geminiApiKeys'), (docSnap) => {
-            if (docSnap.exists() && docSnap.data().keys && Array.isArray(docSnap.data().keys)) {
-                geminiApiKeys = docSnap.data().keys;
-                // Popula os campos do modal com as chaves salvas
-                modalApiKeyInputs.forEach((input, index) => {
-                    input.value = geminiApiKeys[index] || '';
-                });
-                updateApiModalStatus("Chaves de API carregadas.", "info");
-                isGeminiApiReady = geminiApiKeys.some(key => key.trim() !== ''); // Pronto se houver qualquer chave
-                console.log("Chaves de API Gemini carregadas do Firestore.");
-            } else {
-                geminiApiKeys = [];
-                modalApiKeyInputs.forEach(input => input.value = ''); // Limpa os campos
-                updateApiModalStatus("Nenhuma chave de API salva ainda. Por favor, insira e salve.", "info");
-                isGeminiApiReady = false;
-                console.log("Chaves de API Gemini não encontradas no Firestore.");
-            }
-            updateChatUIState();
-        }, (error) => {
-            console.error("Erro ao carregar Chaves de API Gemini do Firestore:", error);
-            geminiApiKeys = [];
-            updateApiModalStatus(`Erro ao carregar chaves de API: ${error.message}`, "error");
-            isGeminiApiReady = false;
-            updateChatUIState();
-        });
-
-        // Listener para Transações - Usa getUserCollectionRef
-        const transactionsColRef = getUserCollectionRef('transactions');
-        if (transactionsColRef) { 
-            onSnapshot(query(transactionsColRef, orderBy('date', 'desc')), (querySnapshot) => {
-                transactions = [];
-                querySnapshot.forEach((doc) => {
-                    transactions.push({ id: doc.id, ...doc.data() });
-                });
-                console.log("Transações carregadas do Firestore.");
-                renderTransactions();
-                updateDashboardAndTransactionSummaries();
-                renderChart();
-            }, (error) => {
-                console.error("Erro ao carregar Transações do Firestore:", error);
-            });
-        }
-    }
-
-    // Função para exibir o status de salvamento (NOVO)
-    function showAiConfigSaveStatus() {
-        aiConfigStatusMessage.classList.remove('hidden');
+// Simulação de objetos do Firebase para desenvolvimento local sem conexão real
+const auth = {
+    currentUser: null,
+    onAuthStateChanged: (callback) => {
+        // Simula um usuário logado após um pequeno atraso para teste
         setTimeout(() => {
-            aiConfigStatusMessage.classList.add('hidden');
-        }, 2000); // A mensagem desaparece após 2 segundos
+            // Para testar o estado de "não logado", comente a linha abaixo
+            // e descomente a linha de "callback(null);"
+            auth.currentUser = { uid: "test-uid-123", email: "teste@exemplo.com" };
+            callback(auth.currentUser);
+            // callback(null); // Descomente para simular "não logado"
+        }, 500);
     }
+};
+const db = {}; // Objeto de banco de dados simulado
 
-    // Salva a configuração da IA no Firestore (ATUALIZADO)
-    async function saveAiConfig() {
-        if (!isAuthReady || !userId) {
-            console.warn("Autenticação não pronta ou userId ausente.");
-            return;
-        }
-        try {
-            const aiConfigRef = getUserDocumentRef('settings', 'aiConfig');
-            const dataToSave = {
-                aiPersona: aiPersonaInput.value,
-                aiPersonality: aiPersonalityInput.value
-            };
-            if (aiConfigRef) {
-                await setDoc(aiConfigRef, dataToSave, { merge: true }); // Usar merge para não sobrescrever
-                showToast("Configurações da IA salvas com sucesso!", "success");
-                console.log("Configurações da IA salvas.");
-            }
-        } catch (error) {
-            console.error("Erro ao salvar AI Config:", error);
-            showToast(`Erro ao salvar configurações da IA: ${error.message}`, "error");
-        }
-    }
+// ================================================================================================
+// ESTADO GLOBAL DA APLICAÇÃO
+// ================================================================================================
 
-    // Salva categorias no Firestore (como um único documento com array)
-    // Agora lida com categorias normais e caixinhas
-    async function saveCategories() {
-        if (!isAuthReady || !userId) { 
-            console.warn("saveCategories: Autenticação não pronta ou userId ausente. Tentando salvar localmente por agora.");
-            showToast('Erro: Autenticação não pronta para salvar no banco.', 'error');
-            return; 
-        }
-        try {
-            const userCategoriesRef = getUserDocumentRef('categories', 'userCategories');
-            if (userCategoriesRef) {
-                await setDoc(userCategoriesRef, { items: categories || [] }); 
-                console.log("saveCategories: Categorias e Caixinhas salvas com sucesso no Firestore!");
-            }
-        } catch (error) {
-            console.error("saveCategories: Erro ao salvar Categorias no Firestore:", error);
-            showToast(`Erro ao salvar categoria: ${error.message}`, 'error');
-        }
-    }
+// Armazena o estado global para evitar múltiplas consultas ao "banco de dados"
+const appState = {
+    user: null,
+    currentDate: new Date(),
+    transactions: [],
+    categories: [],
+    budgets: [],
+    activeApiKey: null,
+    aiPersona: `Você é um coach financeiro. Seu nome é Finanças Claras. Você é especialista em finanças pessoais e ajuda os usuários a entenderem seus gastos, economizar dinheiro e alcançar metas financeiras.`,
+    aiPersonality: `Seja amigável e encorajador, mas direto ao ponto. Use uma linguagem simples e evite jargões financeiros complexos. Use emojis para tornar a conversa mais leve. Suas respostas devem ser concisas e focadas em ações práticas.`
+};
 
-    // Salva uma transação individual ou um grupo de transações no Firestore (adicione ou atualize)
-    async function saveTransaction(transactionData, installments = 1) {
-        if (!isAuthReady || !userId) { console.warn("Autenticação não pronta ou userId ausente."); return; }
-        
-        try {
-            const transactionsColRef = getUserCollectionRef('transactions');
-            if (!transactionsColRef) return;
+// ================================================================================================
+// FUNÇÕES DE UTILIDADE E FORMATAÇÃO
+// ================================================================================================
 
-            const batch = writeBatch(db); // Usar batch para operações atômicas
+/**
+ * Formata um número para o formato de moeda brasileira (BRL).
+ * @param {number} value - O valor numérico a ser formatado.
+ * @returns {string} - O valor formatado como "R$ X.XXX,XX".
+ */
+const formatCurrency = (value) => {
+    if (isNaN(value)) value = 0;
+    return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+};
 
-            if (installments > 1 && !transactionData.recurrenceId) {
-                // Se for uma nova transação parcelada, gera um recurrenceId para o grupo
-                const recurrenceId = generateUUID();
-                for (let i = 0; i < installments; i++) {
-                    const newTransaction = { ...transactionData };
-                    newTransaction.id = generateUUID(); // Novo ID para cada parcela
-                    newTransaction.recurrenceId = recurrenceId;
-                    newTransaction.installmentNumber = i + 1; // Parcela 1, 2, 3...
-                    newTransaction.totalInstallments = installments; // Total de parcelas
-                    
-                    // Ajusta a data para os meses futuros
-                    const originalDate = new Date(transactionData.date + 'T12:00:00');
-                    const futureDate = new Date(originalDate.getFullYear(), originalDate.getMonth() + i, originalDate.getDate());
-                    newTransaction.date = futureDate.toISOString().split('T')[0];
+/**
+ * Converte uma string de moeda (ex: "1.234,56") para um número.
+ * @param {string} currencyString - A string a ser convertida.
+ * @returns {number} - O valor numérico.
+ */
+const parseCurrency = (currencyString) => {
+    if (!currencyString || typeof currencyString !== 'string') return 0;
+    return Number(currencyString.replace(/\./g, '').replace(',', '.'));
+};
 
-                    // Ajusta a descrição para indicar a parcela
-                    newTransaction.description = `${transactionData.description} (Parc. ${i + 1}/${installments})`;
+/**
+ * Formata uma data para o formato YYYY-MM-DD.
+ * @param {Date} date - O objeto Date a ser formatado.
+ * @returns {string} - A data formatada.
+ */
+const formatDateForInput = (date) => {
+    const d = new Date(date);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
 
-                    batch.set(doc(transactionsColRef, newTransaction.id), newTransaction);
-                }
-            } else {
-                // Se for uma transação única ou edição de uma parcela existente
-                if (transactionData.id) {
-                    batch.set(doc(transactionsColRef, transactionData.id), transactionData, { merge: true });
-                } else {
-                    batch.set(doc(transactionsColRef, generateUUID()), transactionData);
-                }
-            }
-            await batch.commit();
-            console.log("Transação(ões) salva(s) com sucesso!");
-        } catch (error) {
-            console.error("Erro ao salvar Transação(ões):", error);
-            showToast(`Erro ao salvar transação: ${error.message}`, 'error');
-        }
-    }
+/**
+ * Exibe uma notificação flutuante (toast).
+ * @param {string} message - A mensagem a ser exibida.
+ * @param {string} [type='info'] - O tipo de toast ('success', 'error', 'info').
+ */
+const showToast = (message, type = 'info') => {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
 
-    // Deleta uma transação individual ou um grupo de transações recorrentes do Firestore
-    async function deleteTransactionFromFirestore(id, recurrenceId = null) {
-        if (!isAuthReady || !userId) { console.warn("Autenticação não pronta ou userId ausente."); return; }
-        try {
-            const batch = writeBatch(db);
-            const transactionsColRef = getUserCollectionRef('transactions');
-            if (!transactionsColRef) return;
+    let iconClass = 'fa-solid fa-circle-info';
+    if (type === 'success') iconClass = 'fa-solid fa-check-circle';
+    if (type === 'error') iconClass = 'fa-solid fa-times-circle';
 
-            if (recurrenceId) {
-                // Deleta todas as transações com o mesmo recurrenceId
-                const q = query(transactionsColRef, where("recurrenceId", "==", recurrenceId));
-                const querySnapshot = await getDocs(q);
-                querySnapshot.forEach((docSnap) => {
-                    batch.delete(doc(transactionsColRef, docSnap.id));
-                });
-                console.log(`Deletando todas as transações com recurrenceId: ${recurrenceId}`);
-            } else {
-                // Deleta apenas a transação individual
-                console.log(`Deletando transação individual: ${id}`);
-                batch.delete(doc(transactionsColRef, id));
-            }
-            await batch.commit();
-            showToast("Transação(ões) deletada(s) com sucesso.", "success");
-        } catch (error) {
-            console.error("Erro ao deletar Transação(ões):", error);
-            showToast(`Erro ao deletar transação: ${error.message}`, 'error');
-        }
-    }
+    toast.innerHTML = `<i class="${iconClass}"></i><p>${message}</p>`;
 
-    // Salva orçamentos no Firestore (como um único documento com array)
-    async function saveBudgets() {
-        if (!isAuthReady || !userId) { console.warn("Autenticação não pronta ou userId ausente."); return; }
-        try {
-            const userBudgetsRef = getUserDocumentRef('budgets', 'userBudgets');
-            if (userBudgetsRef) {
-                await setDoc(userBudgetsRef, { items: budgets || [] });
-                showToast("Orçamento salvo com sucesso!", "success");
-            }
-        } catch (error) {
-            console.error("Erro ao salvar Orçamentos:", error);
-            showToast(`Erro ao salvar orçamento: ${error.message}`, 'error');
-        }
-    }
+    container.appendChild(toast);
 
-    // Salva as chaves da API Gemini no Firestore (ARRAY) - ATUALIZADO
-    async function saveApiKeys() {
-        if (!isAuthReady || !userId) { 
-            updateApiModalStatus("Erro: Autenticação não pronta para salvar as chaves de API.", "error");
-            return; 
-        }
-        const keysToSave = modalApiKeyInputs.map(input => input.value.trim());
-        
-        // Validação simples: pelo menos uma chave deve ser preenchida
-        if (keysToSave.every(key => key === '')) {
-            updateApiModalStatus("Por favor, insira pelo menos uma chave de API válida.", "error");
-            return;
-        }
+    // Adiciona a classe 'show' para iniciar a animação de entrada
+    setTimeout(() => {
+        toast.classList.add('show');
+    }, 100);
 
-        try {
-            const apiKeyRef = getUserDocumentRef('settings', 'geminiApiKeys');
-            if (apiKeyRef) {
-                await setDoc(apiKeyRef, { keys: keysToSave });
-                geminiApiKeys = keysToSave; // Atualiza o array local
-                updateApiModalStatus("Chaves de API salvas com sucesso!", "success");
-                isGeminiApiReady = geminiApiKeys.some(key => key.trim() !== '');
-                updateChatUIState();
-                console.log("Chaves de API Gemini salvas no Firestore.");
-            }
-        } catch (error) {
-            console.error("Erro ao salvar Chaves de API Gemini no Firestore:", error);
-            updateApiModalStatus(`Erro ao salvar chaves de API: ${error.message}`, "error");
-        }
-    }
-    // --- FIM das Funções de Persistência (Firebase Firestore) ---
+    // Remove o toast após alguns segundos
+    setTimeout(() => {
+        toast.classList.remove('show');
+        // Espera a animação de saída terminar antes de remover o elemento
+        toast.addEventListener('transitionend', () => toast.remove());
+    }, 5000);
+};
 
-    await initializeFirebase();
-    
-    // A função loadApiKey agora é disparada pelo onSnapshot dentro de loadAllDataFromFirestore
-    // e não precisa mais ser chamada explicitamente aqui ou em openApiKeysModal.
-    // A UI de chat será atualizada pelo onSnapshot da chave de API.
+// ================================================================================================
+// LÓGICA DE NAVEGAÇÃO E EXIBIÇÃO DE PÁGINAS
+// ================================================================================================
 
-    // --- Funções de UI e Navegação ---
-
-    // Função para exibir a página correta
-    function showPage(pageId) {
-        pageSections.forEach(section => {
-            section.classList.remove('active');
-        });
-        const activePage = document.getElementById(pageId);
-        if (activePage) {
-            activePage.classList.add('active');
-        }
-
-        // Atualizar o estado ativo dos links de navegação
-        navLinks.forEach(link => {
-            link.classList.remove('active');
-            if (link.dataset.page === pageId && (link.classList.contains('nav-link') || link.classList.contains('mobile-nav-item'))) {
-                link.classList.add('active');
-            }
-        });
-
-        // Controla a visibilidade do botão flutuante
-        if (pageId === 'dashboard' || pageId === 'transactions') {
-            fabButton.classList.remove('hidden');
-        } else {
-            fabButton.classList.add('hidden');
-        }
-
-
-        // Ações específicas ao carregar cada página
-        if (pageId === 'chat') {
-            chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
-            bodyEl.classList.add('chat-active');
-        } else {
-            bodyEl.classList.remove('chat-active');
-        }
-        
-        if (pageId === 'categories-management') {
-            renderCategories();
-        } else if (pageId === 'transactions') {
-            // Ao entrar na página de transações, garante que o mês atual seja exibido
-            currentMonth = new Date(); // Reseta para o mês atual
-            updateMonthDisplay();
-            renderTransactions();
-            updateDashboardAndTransactionSummaries();
-        } 
-        else if (pageId === 'dashboard') {
-            updateDashboardAndTransactionSummaries();
-            chartMonth = new Date(); // Reseta o mês do gráfico
-            updateChartMonthDisplay();
-            renderChart();
-            if (!hasGeneratedInitialInsight) {
-                generateFinancialInsights(); // Gera o insight ao entrar na página
-                hasGeneratedInitialInsight = true; // Marca que o insight inicial foi gerado
-            }
-        } else if (pageId === 'budget-management') {
-            renderBudgets();
-        } else if (pageId === 'ai-config') {
-            // Os valores já são populados pelo onSnapshot
-            aiPersonaInput.value = aiConfig.aiPersona;
-            aiPersonalityInput.value = aiConfig.aiPersonality;
-        }
-    }
-
-    // Função para atualizar os cards de resumo no Dashboard
-    function updateDashboardAndTransactionSummaries() {
-        let totalGlobalIncome = 0;
-        let totalGlobalPaidExpenses = 0;
-        let totalPaidExpensesThisMonth = 0;
-        let totalPendingExpenses = 0;
-        const today = new Date();
-        today.setHours(0, 0, 0, 0); // Zera a hora para comparar apenas a data
-        const currentMonthYYYYMM = getCurrentMonthYYYYMM(currentMonth); // Mês selecionado
-
-        // Calcula o Saldo Atual Global (Receitas Totais - Despesas Pagas Totais)
-        transactions.forEach(t => {
-            const isConfirmed = t.status === 'Recebido' || t.status === 'Pago' || t.status === 'Confirmado';
-            if (isConfirmed) {
-                if (t.type === 'income') {
-                    totalGlobalIncome += parseFloat(t.amount);
-                } else if (t.type === 'expense') {
-                    totalGlobalPaidExpenses += parseFloat(t.amount);
-                } else if (t.type === 'caixinha') {
-                    // Para o saldo, depósitos saem do dinheiro disponível e resgates entram
-                    if (t.transactionType === 'deposit') {
-                        totalGlobalPaidExpenses += parseFloat(t.amount);
-                    } else if (t.transactionType === 'withdraw') {
-                        totalGlobalIncome += parseFloat(t.amount);
-                    }
-                }
-            }
-        });
-    
-        // Calcula Despesas Pagas do Mês Selecionado
-        transactions.forEach(t => {
-            const transactionMonth = t.date.substring(0, 7);
-            if (t.type === 'expense' && (t.status === 'Pago') && transactionMonth === currentMonthYYYYMM) {
-                totalPaidExpensesThisMonth += parseFloat(t.amount);
-            }
-        });
-    
-        // Calcula Despesas Pendentes (Vencidas ou que vencem no futuro)
-        transactions.forEach(t => {
-            if (t.type === 'expense' && t.status === 'Pendente') {
-                totalPendingExpenses += parseFloat(t.amount);
-            }
-        });
-    
-        const cumulativeBalance = totalGlobalIncome - totalGlobalPaidExpenses;
-        dashboardCurrentBalance.textContent = formatCurrency(cumulativeBalance);
-        dashboardPaidExpenses.textContent = formatCurrency(totalPaidExpensesThisMonth); // Atualizado para o valor do mês
-        dashboardPendingExpenses.textContent = formatCurrency(totalPendingExpenses);
-    
-        // Calcula o Total Guardado em Caixinhas (cumulativo)
-        let totalCaixinhasSaved = categories
-            .filter(cat => cat.type === 'caixinha')
-            .reduce((sum, caixinha) => sum + parseFloat(caixinha.savedAmount || 0), 0);
-        dashboardTotalCaixinhasSaved.textContent = formatCurrency(totalCaixinhasSaved);
-    }
-
-
-    // --- Funções de Gerenciamento de Categorias ---
-
-    /**
-     * Retorna a próxima cor disponível para uma categoria com base no seu tipo e prioridade.
-     * A função tenta encontrar uma cor que ainda não esteja em uso por outras categorias
-     * do mesmo tipo/prioridade. Se todas as cores da paleta estiverem em uso, ela cicla.
-     * @param {string} type - O tipo da categoria ('income', 'expense', 'caixinha').
-     * @param {string} [priority] - A prioridade da categoria ('essential', 'non-essential'), aplicável apenas a 'expense'.
-     * @returns {string} A cor hexadecimal selecionada.
-     */
-    function getNextAvailableColor(type, priority = null) {
-        let palette;
-        if (type === 'income') {
-            palette = INCOME_COLORS;
-        } else if (type === 'expense') {
-            palette = (priority === 'essential') ? ESSENTIAL_COLORS : NON_ESSENTIAL_COLORS;
-        } else if (type === 'caixinha') {
-            palette = CAIXINHA_COLORS;
-        } else {
-            return '#9E9E9E'; // Cor padrão de fallback
-        }
-
-        // Filtra as categorias existentes para encontrar as do mesmo tipo/prioridade
-        const relevantCategories = categories.filter(cat => {
-            if (cat.type !== type) return false;
-            if (type === 'expense' && cat.priority !== priority) return false;
-            return true;
-        });
-
-        const usedColors = new Set(relevantCategories.map(cat => cat.color));
-
-        // Tenta encontrar uma cor não utilizada
-        for (const color of palette) {
-            if (!usedColors.has(color)) {
-                return color;
-            }
-        }
-
-        // Se todas foram usadas, reutiliza de forma cíclica
-        return palette[relevantCategories.length % palette.length];
-    }
-
-    // Função para renderizar as categorias (e caixinhas) na lista
-    function renderCategories(filter = '') {
-        categoryListContainer.innerHTML = '';
-
-        const filteredCategories = categories.filter(cat => 
-            cat.name.toLowerCase().includes(filter.toLowerCase())
-        );
-
-        if (filteredCategories.length === 0 && filter === '') {
-            categoryListContainer.innerHTML = '<p class="text-center text-gray-500 py-4">Nenhuma categoria ou caixinha cadastrada. Adicione uma nova!</p>';
-        } else if (filteredCategories.length === 0 && filter !== '') {
-            categoryListContainer.innerHTML = `<p class="text-center text-gray-500 py-4">Nenhuma categoria ou caixinha encontrada para "${filter}".</p>`;
-        }
-
-        filteredCategories.forEach(category => {
-            const categoryItem = document.createElement('div');
-            categoryItem.className = 'bg-white p-4 rounded-lg shadow-sm flex items-start justify-between';
-            
-            let typeDisplay = '';
-            let priorityDisplay = '';
-            let detailsHtml = '';
-
-            if (category.type === 'income') {
-                typeDisplay = 'Receita';
-                detailsHtml = `<p class="text-sm text-gray-500">${typeDisplay}</p>`;
-            } else if (category.type === 'expense') {
-                typeDisplay = 'Despesa';
-                priorityDisplay = category.priority ? (category.priority === 'essential' ? 'Essencial' : 'Não Essencial') : '';
-                detailsHtml = `<p class="text-sm text-gray-500">${typeDisplay} &bull; ${priorityDisplay}</p>`;
-            } else if (category.type === 'caixinha') {
-                typeDisplay = 'Caixinha';
-                const saved = parseFloat(category.savedAmount || 0);
-                const target = parseFloat(category.targetAmount || 0);
-                const progress = (target > 0) ? (saved / target) * 100 : 0;
-                const progressBarColor = progress >= 100 ? 'bg-green-500' : (progress > 50 ? 'bg-blue-500' : 'bg-yellow-500');
-
-                detailsHtml = `
-                    <p class="text-sm text-gray-500">${typeDisplay}</p>
-                    <p class="text-sm text-gray-600 mt-1">
-                        <span class="font-medium">${formatCurrency(saved)}</span> de ${formatCurrency(target)}
-                    </p>
-                    <div class="w-full bg-gray-200 rounded-full h-2.5 dark:bg-gray-700 mt-2">
-                        <div class="${progressBarColor} h-2.5 rounded-full" style="width: ${Math.min(100, progress)}%"></div>
-                    </div>
-                    <p class="text-xs text-gray-500 mt-1 text-right">${progress.toFixed(0)}% Concluído</p>
-                `;
-            }
-
-            categoryItem.innerHTML = `
-                <div class="flex items-start flex-grow">
-                    <div class="w-4 h-4 rounded-full mr-4 mt-1" style="background-color: ${category.color};"></div>
-                    <div class="flex-grow">
-                        <p class="font-semibold text-lg text-gray-800">${category.name}</p>
-                        ${detailsHtml}
-                    </div>
-                </div>
-                <div class="relative">
-                    <button class="action-menu-button p-2 rounded-full hover:bg-gray-100" data-id="${category.id}">
-                        <i class="fa-solid fa-ellipsis-vertical text-gray-500"></i>
-                    </button>
-                    <div class="action-menu-dropdown hidden">
-                        <a href="#" class="edit-category-button" data-id="${category.id}">Editar</a>
-                        <a href="#" class="delete-category-button" data-id="${category.id}">Apagar</a>
-                    </div>
-                </div>
-            `;
-            categoryListContainer.appendChild(categoryItem);
-        });
-    }
-
-    // Abre o modal de categoria (agora também para caixinhas)
-    function openCategoryModal(category = null) {
-        categoryModal.classList.add('active');
-        categoryForm.reset(); // Limpa o formulário
-        categoryTargetAmountInput.value = ''; // Limpa o campo de valor alvo
-
-        if (category) {
-            categoryModalTitle.textContent = 'Editar Categoria';
-            categoryIdInput.value = category.id;
-            categoryNameInput.value = category.name;
-            document.querySelector(`input[name="category-type"][value="${category.type}"]`).checked = true;
-            
-            // Controla a visibilidade do campo de prioridade
-            if (category.type === 'expense') {
-                priorityField.style.display = 'block';
-                document.querySelector(`input[name="category-priority"][value="${category.priority || 'essential'}"]`).checked = true;
-            } else {
-                priorityField.style.display = 'none';
-            }
-
-            // Controla a visibilidade e preenche o campo de valor alvo para caixinhas
-            if (category.type === 'caixinha') {
-                targetAmountField.style.display = 'block';
-                categoryTargetAmountInput.value = (parseFloat(category.targetAmount || 0) * 100).toFixed(0);
-                formatCurrencyInput(categoryTargetAmountInput); // Formata o valor
-            } else {
-                targetAmountField.style.display = 'none';
-            }
-
-        } else { // Adicionar nova categoria/caixinha
-            categoryModalTitle.textContent = 'Adicionar Nova Categoria ou Caixinha';
-            categoryIdInput.value = '';
-            categoryNameInput.value = '';
-            document.querySelector('input[name="category-type"][value="expense"]').checked = true; // Padrão para Despesa
-            priorityField.style.display = 'block'; // Visível por padrão para despesa
-            document.querySelector(`input[name="category-priority"][value="essential"]`).checked = true;
-            targetAmountField.style.display = 'none'; // Escondido por padrão
-        }
-    }
-
-    // Fecha o modal de categoria
-    function closeCategoryModal() {
-        categoryModal.classList.remove('active');
-        categoryForm.reset();
-    }
-
-    // Lida com o envio do formulário de categoria
-    categoryForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const id = categoryIdInput.value;
-        const name = categoryNameInput.value.trim();
-        const type = document.querySelector('input[name="category-type"]:checked').value;
-        
-        if (!name) {
-            showToast('O nome da categoria é obrigatório!', 'error');
-            return;
-        }
-        
-        let priority = (type === 'expense') ? document.querySelector('input[name="category-priority"]:checked').value : null;
-        let targetAmount = null;
-        let savedAmount = null;
-
-        if (type === 'caixinha') {
-            const targetAmountFormatted = categoryTargetAmountInput.value.replace(/\./g, '').replace(',', '.');
-            targetAmount = parseFloat(targetAmountFormatted) || 0;
-            // Se estiver editando uma caixinha existente, mantém o savedAmount
-            if (id) {
-                const existingCategory = categories.find(cat => cat.id === id);
-                savedAmount = existingCategory ? existingCategory.savedAmount : 0;
-            } else {
-                // Se for uma nova caixinha, o valor guardado começa em 0
-                savedAmount = 0;
-            }
-        }
-
-        if (id) { // Editando uma categoria existente
-            const index = categories.findIndex(cat => cat.id === id);
-            if (index !== -1) {
-                const originalCategory = categories[index];
-                const mudouTipo = originalCategory.type !== type;
-                const mudouPrioridade = originalCategory.priority !== priority;
-                                        
-                // Mantém a cor se o tipo/prioridade não mudar
-                let newColor = originalCategory.color; 
-                                        
-                // Recalcula a cor apenas se o tipo ou prioridade mudou
-                if (mudouTipo || mudouPrioridade) {
-                    newColor = getNextAvailableColor(type, priority);
-                }
-                categories[index] = { 
-                    ...originalCategory, 
-                    name, 
-                    type, 
-                    priority, 
-                    color: newColor,
-                    targetAmount: targetAmount, // Atualiza targetAmount
-                    savedAmount: savedAmount // Atualiza savedAmount
-                };
-            }
-        } else { // Criando uma nova categoria
-            const newColor = getNextAvailableColor(type, priority);
-            const newCategory = { 
-                id: generateUUID(), 
-                name, 
-                type, 
-                priority, 
-                color: newColor,
-                targetAmount: targetAmount,
-                savedAmount: savedAmount
-            };
-                                
-            categories.push(newCategory);
-        }
-        await saveCategories();
-        showToast('Categoria salva com sucesso!', 'success');
-        
-        // Se o modal de transação estiver aberto, atualiza a lista de categorias lá
-        if(transactionModal.classList.contains('active')) {
-            const selectedType = document.querySelector('input[name="transaction-type"]:checked').value;
-            // Encontra o ID da categoria que acabou de ser criada/editada
-            const lastSavedCategory = categories.find(c => c.name === name && c.type === type);
-            populateTransactionCategories(selectedType);
-            // Seleciona a categoria recém-criada
-            if(lastSavedCategory) {
-                 transactionCategorySelect.value = lastSavedCategory.id;
-            }
-        }
-        closeCategoryModal(); // Fecha o modal após salvar
+/**
+ * Navega para uma página específica, mostrando a seção correta e atualizando os links de navegação.
+ * @param {string} pageId - O ID da página para a qual navegar (ex: 'dashboard').
+ * @param {boolean} [isBack=false] - Indica se a navegação é um retorno (para não adicionar ao histórico).
+ */
+const navigateToPage = (pageId, isBack = false) => {
+    // Esconde todas as seções de página
+    document.querySelectorAll('.page-section').forEach(section => {
+        section.classList.remove('active');
     });
 
-    // Lida com cliques nos botões de editar/excluir categorias (delegação de eventos)
-    categoryListContainer.addEventListener('click', (e) => {
-        const target = e.target;
-        // Lógica para o menu de 3 pontos
-        const menuButton = target.closest('.action-menu-button');
-        if (menuButton) {
-            e.stopPropagation(); 
-            const dropdown = menuButton.nextElementSibling;
-            document.querySelectorAll('.action-menu-dropdown').forEach(openDropdown => {
-                if (openDropdown !== dropdown) {
-                    openDropdown.classList.add('hidden');
-                }
-            });
-            dropdown.classList.toggle('hidden');
-            return;
-        }
+    // Mostra a seção de página solicitada
+    const targetPage = document.getElementById(pageId);
+    if (targetPage) {
+        targetPage.classList.add('active');
+    }
 
-        const editButton = target.closest('.edit-category-button');
-        if (editButton) {
-            const id = editButton.dataset.id;
-            const categoryToEdit = categories.find(cat => cat.id === id);
-            if (categoryToEdit) {
-                openCategoryModal(categoryToEdit);
-            }
-        } 
-        
-        const deleteButton = target.closest('.delete-category-button');
-        if (deleteButton) {
-            const id = deleteButton.dataset.id;
-            const categoryToDelete = categories.find(cat => cat.id === id);
-
-            showConfirmationModal(
-                "Confirmar Exclusão",
-                `Tem certeza que deseja excluir a categoria "${categoryToDelete.name}"? Todas as transações associadas a ela ficarão sem categoria.`,
-                async () => {
-                    categories = categories.filter(cat => cat.id !== id);
-                    const transactionsToUpdate = transactions.filter(t => t.categoryId === id);
-                    for (const t of transactionsToUpdate) {
-                        t.categoryId = 'unknown'; // Define como categoria desconhecida
-                        t.transactionType = null; // Limpa o tipo de transação se for caixinha
-                        t.caixinhaId = null; // Limpa o ID da caixinha
-                        await saveTransaction(t);
-                    }
-                    await saveCategories();
-                    showToast("Categoria deletada.", "info");
-                    updateDashboardAndTransactionSummaries();
-                }
-            );
+    // Atualiza o estado 'active' nos links de navegação (desktop e mobile)
+    document.querySelectorAll('.nav-link, .mobile-nav-item').forEach(link => {
+        link.classList.remove('active');
+        if (link.dataset.page === pageId) {
+            link.classList.add('active');
         }
     });
 
-    // Lógica para mostrar/esconder o campo de prioridade e valor alvo
-    categoryTypeRadios.forEach(radio => {
-        radio.addEventListener('change', (event) => {
-            const selectedType = event.target.value;
-            // Mostra/esconde campo de prioridade
-            priorityField.style.display = (selectedType === 'expense') ? 'block' : 'none';
-            // Mostra/esconde campo de valor alvo
-            targetAmountField.style.display = (selectedType === 'caixinha') ? 'block' : 'none';
-            // Limpa o valor do campo alvo se não for caixinha
-            if (selectedType !== 'caixinha') {
-                categoryTargetAmountInput.value = '';
-            }
-        });
-    });
-
-    // Listener para formatar o input de valor alvo da categoria/caixinha
-    categoryTargetAmountInput.addEventListener('input', () => {
-        formatCurrencyInput(categoryTargetAmountInput);
-    });
-
-
-    // --- Funções de Gerenciamento de Transações ---
-
-    // Função para popular o dropdown de categorias (e caixinhas) no modal de transações
-    function populateTransactionCategories(selectedTransactionType = null) {
-        const previouslySelected = transactionCategorySelect.value; // Salva a categoria selecionada
-        transactionCategorySelect.innerHTML = '<option value="">Selecione uma Categoria</option>';
-
-        let filteredCategories = [];
-        // A lógica aqui precisa ser mais inteligente para o novo fluxo:
-        // Se for 'income' ou 'expense', filtra por essas categorias.
-        // Se for 'deposit' ou 'withdraw', filtra por categorias do tipo 'caixinha'.
-        if (selectedTransactionType === 'expense' || selectedTransactionType === 'income') {
-            filteredCategories = categories.filter(cat => cat.type === selectedTransactionType);
-        } else if (selectedTransactionType === 'deposit' || selectedTransactionType === 'withdraw') {
-            filteredCategories = categories.filter(cat => cat.type === 'caixinha');
-        }
-
-        if (filteredCategories.length > 0) {
-            filteredCategories.forEach(cat => {
-                const option = document.createElement('option');
-                option.value = cat.id;
-                option.textContent = cat.name; 
-                transactionCategorySelect.appendChild(option);
-            });
-        } else {
-            transactionCategorySelect.innerHTML += '<option value="" disabled>Nenhuma categoria disponível para este tipo</option>';
-        }
-
-        // Tenta restaurar a seleção anterior se ela ainda for válida na nova lista
-        if (Array.from(transactionCategorySelect.options).some(opt => opt.value === previouslySelected)) {
-            transactionCategorySelect.value = previouslySelected;
-        }
+    // Lógica especial para a página de chat em telas móveis
+    if (pageId === 'chat') {
+        document.body.classList.add('chat-active');
+    } else {
+        document.body.classList.remove('chat-active');
     }
 
-
-    // Renderiza as transações
-    function renderTransactions() {
-        transactionsListContainer.innerHTML = `
-            <div class="absolute left-3 top-0 bottom-0 w-0.5 bg-gray-200"></div>
-        `; 
-
-        const currentMonthYYYYMM = getCurrentMonthYYYYMM(currentMonth);
-
-        // APLICA FILTROS (NOVO)
-        const typeFilter = filterTypeSelect.value;
-        const categoryFilter = filterCategorySelect.value;
-        const statusFilter = filterStatusSelect.value;
-
-        const filteredTransactions = transactions.filter(t => {
-            const transactionMonth = t.date.substring(0, 7);
-            if (transactionMonth !== currentMonthYYYYMM) return false;
-            
-            if (typeFilter !== 'all' && t.type !== typeFilter) return false;
-            if (categoryFilter !== 'all' && t.categoryId !== categoryFilter) return false;
-            if (statusFilter !== 'all' && t.status !== statusFilter) return false;
-            
-            return true;
-        });
-
-        if (filteredTransactions.length === 0) {
-            transactionsListContainer.innerHTML += '<p class="text-center text-gray-500 py-4" id="no-transactions-message">Nenhuma transação encontrada para os filtros selecionados.</p>';
-            return;
-        }
-
-        const groupedTransactions = filteredTransactions.reduce((acc, transaction) => {
-            const date = transaction.date;
-            if (!acc[date]) {
-                acc[date] = [];
-            }
-            acc[date].push(transaction);
-            return acc;
-        }, {});
-
-        const sortedDates = Object.keys(groupedTransactions).sort((a, b) => new Date(b) - new Date(a));
-
-        sortedDates.forEach(date => {
-            const dateGroupDiv = document.createElement('div');
-            dateGroupDiv.className = 'mb-6 relative pl-8';
-
-            const formattedDate = new Date(date + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
-
-            dateGroupDiv.innerHTML = `
-                <div class="timeline-bullet-date">
-                    <i class="fa-solid fa-calendar-days text-sm"></i>
-                </div>
-                <h3 class="text-xl font-semibold mb-3 ml-2">${formattedDate}</h3>
-                <div class="space-y-3"></div>
-            `;
-            const transactionsForDateDiv = dateGroupDiv.querySelector('.space-y-3');
-
-            groupedTransactions[date].sort((a, b) => {
-                const dateA = new Date(a.date);
-                const dateB = new Date(b.date);
-                if (dateA.getTime() === dateB.getTime()) {
-                    return a.description.localeCompare(b.description);
-                }
-                return dateB - dateA;
-            }).forEach(transaction => {
-                let categoryName = 'Categoria Desconhecida';
-                let bulletColor = '#9E9E9E';
-                let amountColorClass = '';
-                let amountPrefix = '';
-                let transactionTypeDisplay = '';
-
-                const category = categories.find(cat => cat.id === transaction.categoryId);
-                if (category) {
-                    categoryName = category.name;
-                    bulletColor = category.color;
-                } else {
-                    categoryName = 'Categoria Desconhecida';
-                    bulletColor = '#9E9E9E';
-                }
-
-                if (transaction.type === 'income') {
-                    amountColorClass = 'text-[var(--color-green-positive)]';
-                    amountPrefix = '+';
-                    transactionTypeDisplay = categoryName;
-                } else if (transaction.type === 'expense') {
-                    amountColorClass = 'text-[var(--color-red-negative)]';
-                    amountPrefix = '-';
-                    transactionTypeDisplay = categoryName;
-                } else if (transaction.type === 'caixinha') {
-                    if (transaction.transactionType === 'deposit') {
-                        amountColorClass = 'text-blue-600'; // Cor azul para depósito
-                        amountPrefix = '→'; // Seta para indicar movimento
-                        transactionTypeDisplay = `Depósito em: ${categoryName}`;
-                    } else if (transaction.transactionType === 'withdraw') {
-                        amountColorClass = 'text-indigo-600'; // Cor índigo para resgate
-                        amountPrefix = '←'; // Seta para indicar movimento
-                        transactionTypeDisplay = `Resgate de: ${categoryName}`;
-                    }
-                }
-                
-                const isPaidOrReceived = (transaction.status === 'Pago' || transaction.status === 'Recebido' || transaction.status === 'Confirmado');
-                const bulletClass = isPaidOrReceived ? 'transaction-bullet paid' : 'transaction-bullet';
-                const bulletStyle = isPaidOrReceived ? `background-color: ${bulletColor};` : `border: 3px solid ${bulletColor};`;
-                
-                const statusIndicatorText = transaction.status === 'Pendente' ? 'Pendente' : 
-                                            (transaction.type === 'income' && transaction.status === 'Recebido' ? 'Recebido' : 
-                                            (transaction.type === 'expense' && transaction.status === 'Pago' ? 'Pago' : 
-                                            (transaction.type === 'caixinha' && transaction.status === 'Confirmado' ? 'Confirmado' : '')));
-                const statusIndicatorHtml = statusIndicatorText ? `<p class="text-xs text-gray-500">${statusIndicatorText}</p>` : '';
-
-                const installmentInfo = transaction.installmentNumber && transaction.totalInstallments ? 
-                                        `<span class="text-xs text-gray-500 ml-2">(Parc. ${transaction.installmentNumber}/${transaction.totalInstallments})</span>` : '';
-
-                const transactionItem = document.createElement('div');
-                transactionItem.className = `bg-white p-4 rounded-lg shadow-sm flex justify-between items-center relative pl-8`; 
-                transactionItem.innerHTML = `
-                    <div class="${bulletClass}" style="${bulletStyle}"></div>
-                    <div class="flex-grow min-w-0">
-                        <p class="font-medium truncate text-gray-800">${transactionTypeDisplay} ${installmentInfo}</p>
-                        ${statusIndicatorHtml}
-                        <p class="text-sm text-gray-500 truncate">${transaction.description}</p>
-                    </div>
-                    <div class="flex items-center space-x-2 ml-4">
-                        <p class="font-bold text-lg ${amountColorClass}">${amountPrefix} ${formatCurrency(transaction.amount)}</p>
-                        <div class="relative">
-                            <button class="action-menu-button p-2 rounded-full hover:bg-gray-100" data-id="${transaction.id}">
-                                <i class="fa-solid fa-ellipsis-vertical text-gray-500"></i>
-                            </button>
-                            <div class="action-menu-dropdown hidden">
-                                <a href="#" class="edit-transaction-button" data-id="${transaction.id}">Editar</a>
-                                <a href="#" class="delete-transaction-button" data-id="${transaction.id}">Apagar</a>
-                                ${transaction.recurrenceId ? `<a href="#" class="delete-recurrence-button" data-recurrence-id="${transaction.recurrenceId}">Apagar Recorrência</a>` : ''}
-                            </div>
-                        </div>
-                    </div>
-                `;
-                transactionsForDateDiv.appendChild(transactionItem);
-            });
-            transactionsListContainer.appendChild(dateGroupDiv);
-        });
-        
+    // Adiciona ao histórico do navegador para permitir o uso do botão "voltar"
+    if (!isBack) {
+        history.pushState({ page: pageId }, '', `#${pageId}`);
     }
 
-    // Função para atualizar as opções de status com botões de rádio
-    function updateTransactionStatusOptions(transactionType) {
-        const statusContainer = document.getElementById('transaction-status-options');
-        statusContainer.innerHTML = '';
-        let options = [];
-        if (transactionType === 'income') {
-            options = [{ value: 'Recebido', label: 'Recebido' }, { value: 'Pendente', label: 'Pendente' }];
-        } else if (transactionType === 'expense') {
-            options = [{ value: 'Pago', label: 'Pago' }, { value: 'Pendente', label: 'Pendente' }];
-        } else { // caixinha (deposit/withdraw)
-            options = [{ value: 'Confirmado', label: 'Confirmado' }]; // Simplificado para caixinhas
-        }
+    // Rola a página para o topo
+    window.scrollTo(0, 0);
+};
 
-        options.forEach((opt, index) => {
-            const wrapper = document.createElement('div');
-            const input = document.createElement('input');
-            input.type = 'radio';
-            input.name = 'transaction-status-radio'; // Novo nome para evitar conflito com o select removido
-            input.id = `status-${opt.value}`;
-            input.value = opt.value;
-            input.className = 'hidden peer';
-            if (index === 0) input.checked = true; // Marca a primeira opção como padrão
-
-            const label = document.createElement('label');
-            label.htmlFor = `status-${opt.value}`;
-            label.textContent = opt.label;
-            label.className = 'px-4 py-2 border rounded-lg cursor-pointer transition peer-checked:bg-[var(--color-blue-primary)] peer-checked:text-white peer-checked:border-[var(--color-blue-primary)]';
-            
-            wrapper.appendChild(input);
-            wrapper.appendChild(label);
-            statusContainer.appendChild(wrapper);
-        });
+/**
+ * Manipula o evento 'popstate' do navegador (botão de voltar/avançar).
+ * @param {PopStateEvent} event - O evento popstate.
+ */
+window.onpopstate = (event) => {
+    if (event.state && event.state.page) {
+        navigateToPage(event.state.page, true);
+    } else {
+        // Se não houver estado, volta para o dashboard
+        navigateToPage('dashboard', true);
     }
-
-    // Função para controlar a visibilidade das etapas do modal de transação
-    function goToStep(stepNumber, preserveState = false) {
-        if (stepNumber < 1 || stepNumber > totalSteps) {
-            console.error("Tentativa de ir para uma etapa inválida:", stepNumber);
-            return;
-        }
-
-        let savedCategory = '';
-        if (preserveState) {
-            savedCategory = transactionCategorySelect.value;
-        }
-
-        currentStep = stepNumber;
-        transactionSteps.forEach((step, index) => {
-            if (index + 1 === currentStep) {
-                step.classList.remove('hidden');
-            } else {
-                step.classList.add('hidden');
-            }
-        });
-
-        // Ações específicas para cada etapa ao navegar
-        if (currentStep === 2) {
-            const selectedType = document.querySelector('input[name="transaction-type"]:checked').value;
-            populateTransactionCategories(selectedType);
-            if (preserveState && savedCategory) {
-                 transactionCategorySelect.value = savedCategory;
-            }
-
-            // Mostra ou esconde o botão de sugestão de IA
-            if (selectedType === 'deposit' || selectedType === 'withdraw') {
-                suggestCategoryButton.style.display = 'none';
-            } else {
-                suggestCategoryButton.style.display = 'inline-flex';
-            }
-
-            transactionAmountInput.focus();
-        } else if (currentStep === 3) {
-            // Lógica combinada da antiga etapa 3 e 4
-            const selectedType = document.querySelector('input[name="transaction-type"]:checked').value;
-            updateTransactionStatusOptions(selectedType); // Move a chamada para cá
-            if (transactionIdInput.value) {
-                const transactionToEdit = transactions.find(t => t.id === transactionIdInput.value);
-                if (transactionToEdit) {
-                    const statusRadio = document.querySelector(`input[name="transaction-status-radio"][value="${transactionToEdit.status}"]`);
-                    if (statusRadio) statusRadio.checked = true;
-                }
-            }
-            
-            if (selectedType === 'expense' || selectedType === 'income') {
-                installmentsField.style.display = 'block';
-            } else {
-                installmentsField.style.display = 'none';
-                transactionInstallmentsInput.value = 1;
-            }
-
-            if (transactionIdInput.value) {
-                const transactionToEdit = transactions.find(t => t.id === transactionIdInput.value);
-                 if (transactionToEdit && transactionToEdit.totalInstallments) {
-                    transactionInstallmentsInput.value = transactionToEdit.totalInstallments;
-                    transactionInstallmentsInput.disabled = true;
-                } else {
-                    transactionInstallmentsInput.value = 1;
-                    transactionInstallmentsInput.disabled = false;
-                }
-            } else {
-                transactionInstallmentsInput.value = 1;
-                transactionInstallmentsInput.disabled = false;
-            }
-            transactionDateInput.focus();
-        }
-    }
-
-
-    // Abre o modal de transação (agora apenas reseta e vai para a primeira etapa)
-    function openTransactionModal(transaction = null) {
-        transactionModal.classList.add('active');
-        transactionForm.reset();
-        transactionDateInput.valueAsDate = new Date(); // Define data padrão
-        
-        if (transaction) {
-            transactionIdInput.value = transaction.id;
-            transactionAmountInput.value = (parseFloat(transaction.amount) * 100).toFixed(0);
-            formatCurrencyInput(transactionAmountInput);
-            transactionDescriptionInput.value = transaction.description;
-            transactionDateInput.value = transaction.date;
-
-            // Marca o tipo de transação correto para edição
-            let typeToSelect = transaction.type;
-            if (transaction.type === 'caixinha') {
-                typeToSelect = transaction.transactionType; // 'deposit' ou 'withdraw'
-            }
-            const typeButton = document.querySelector(`.step-1-type-button[data-type="${typeToSelect}"]`);
-            if (typeButton) {
-                document.querySelectorAll('.step-1-type-button').forEach(btn => btn.classList.remove('selected'));
-                typeButton.classList.add('selected');
-                document.querySelector(`input[name="transaction-type"][value="${typeToSelect}"]`).checked = true;
-            }
-            
-            populateTransactionCategories(typeToSelect);
-            transactionCategorySelect.value = transaction.categoryId;
-            goToStep(2, true); // Pula para a etapa 2, preservando o estado
-        } else {
-            transactionIdInput.value = ''; // Garante que o ID da transação seja limpo para novas transações
-            goToStep(1);
-            // Remove a classe 'selected' de todos os botões de tipo ao abrir o modal
-            document.querySelectorAll('.step-1-type-button').forEach(button => {
-                button.classList.remove('selected');
-            });
-        }
-    }
-
-    // Fecha o modal de transação
-    function closeTransactionModal() {
-        transactionModal.classList.remove('active');
-        transactionForm.reset();
-        currentStep = 1; // Reseta para a primeira etapa ao fechar
-    }
-
-    // Lida com o envio do formulário de transação
-    transactionForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        // O tipo agora vem do radio button oculto
-        const typeSelectedInStep1 = document.querySelector('input[name="transaction-type"]:checked').value;
-        
-        const id = transactionIdInput.value;
-        const description = transactionDescriptionInput.value.trim();
-        
-        const amountFormatted = transactionAmountInput.value.replace(/\./g, '').replace(',', '.');
-        const amount = parseFloat(amountFormatted);
-
-        const date = transactionDateInput.value;
-        // ATUALIZADO: Obtém o valor do rádio selecionado
-        const status = document.querySelector('input[name="transaction-status-radio"]:checked').value; 
-        const categoryId = transactionCategorySelect.value;
-        const installments = parseInt(transactionInstallmentsInput.value, 10) || 1; // Novo campo de parcelas
-
-        let transactionTypeForCaixinha = null; // 'deposit' or 'withdraw'
-        let transactionCategoryType = null; // 'income', 'expense', or 'caixinha'
-
-        // Validação básica (descrição agora é opcional)
-        if (isNaN(amount) || !date || !status || !categoryId) {
-            showConfirmationModal("Erro de Validação", "Por favor, preencha todos os campos da transação corretamente (valor, data, status, categoria).", () => {});
-            return;
-        }
-        if (installments < 1) {
-            showConfirmationModal("Erro de Validação", "O número de parcelas deve ser no mínimo 1.", () => {});
-            return;
-        }
-
-        // Determina o tipo de transação real ('income', 'expense', 'caixinha')
-        // e o tipo de movimento da caixinha ('deposit', 'withdraw')
-        const selectedCategory = categories.find(cat => cat.id === categoryId);
-
-        if (!selectedCategory) {
-            console.error("Categoria selecionada não encontrada.");
-            return;
-        }
-
-        transactionCategoryType = selectedCategory.type;
-
-        if (selectedCategory.type === 'caixinha') {
-            // Se a categoria é uma caixinha, o 'type' da transação será 'caixinha'
-            // e 'transactionTypeForCaixinha' será 'deposit' ou 'withdraw'
-            if (typeSelectedInStep1 === 'deposit') {
-                transactionTypeForCaixinha = 'deposit';
-                selectedCategory.savedAmount = (selectedCategory.savedAmount || 0) + amount;
-            } else if (typeSelectedInStep1 === 'withdraw') {
-                transactionTypeForCaixinha = 'withdraw';
-                if ((selectedCategory.savedAmount || 0) < amount) {
-                    showConfirmationModal(
-                        "Erro de Resgate",
-                        "O valor que você está tentando resgatar é maior do que o valor guardado nesta caixinha. Por favor, ajuste o valor.",
-                        () => {} // Não faz nada ao confirmar, apenas fecha o modal
-                    );
-                    return; // Impede o salvamento da transação
-                }
-                selectedCategory.savedAmount -= amount;
-            }
-            await saveCategories(); // Salva o estado atualizado das categorias (que inclui a caixinha)
-        }
-
-        // Criar ou atualizar a transação
-        const newTransaction = { 
-            id: id || generateUUID(), 
-            description, 
-            amount, 
-            date, 
-            type: transactionCategoryType, // Usa o tipo real da categoria
-            categoryId, 
-            status 
-        };
-
-        // Adiciona campos específicos para transações de caixinha se aplicável
-        if (transactionCategoryType === 'caixinha') {
-            newTransaction.transactionType = transactionTypeForCaixinha;
-            newTransaction.caixinhaId = selectedCategory.id; // O ID da caixinha é o ID da categoria
-        }
-
-        // Salva a transação, passando o número de parcelas
-        await saveTransaction(newTransaction, installments);
-        showToast("Transação salva com sucesso!", "success");
-        closeTransactionModal();
-    });
-
-    // Lida com cliques nos botões de editar/excluir transações (delegação de eventos)
-    transactionsListContainer.addEventListener('click', (e) => {
-        const target = e.target;
-    
-        // Lógica para o menu de 3 pontos
-        const menuButton = target.closest('.action-menu-button');
-        if (menuButton) {
-            e.stopPropagation();
-            const dropdown = menuButton.nextElementSibling;
-            // Fecha outros menus abertos
-            document.querySelectorAll('.action-menu-dropdown').forEach(openDropdown => {
-                if (openDropdown !== dropdown) {
-                    openDropdown.classList.add('hidden');
-                }
-            });
-            dropdown.classList.toggle('hidden');
-            return;
-        }
-    
-        // Lógica para o botão de editar
-        const editButton = target.closest('.edit-transaction-button');
-        if (editButton) {
-            const id = editButton.dataset.id;
-            const transactionToEdit = transactions.find(t => t.id === id);
-            if (transactionToEdit) {
-                openTransactionModal(transactionToEdit);
-            }
-            return; // Encerra a execução para evitar outros gatilhos
-        }
-    
-        // Lógica para o botão de apagar
-        const deleteButton = target.closest('.delete-transaction-button');
-        if (deleteButton) {
-            const id = deleteButton.dataset.id;
-            showConfirmationModal(
-                "Confirmar Exclusão",
-                "Tem certeza que deseja excluir esta transação?",
-                async () => {
-                    const deletedTransaction = transactions.find(t => t.id === id);
-                    if (deletedTransaction && deletedTransaction.type === 'caixinha' && deletedTransaction.caixinhaId) {
-                        const caixinha = categories.find(c => c.id === deletedTransaction.caixinhaId);
-                        if (caixinha) {
-                            if (deletedTransaction.transactionType === 'deposit') {
-                                caixinha.savedAmount -= parseFloat(deletedTransaction.amount);
-                            } else if (deletedTransaction.transactionType === 'withdraw') {
-                                caixinha.savedAmount += parseFloat(deletedTransaction.amount);
-                            }
-                            await saveCategories();
-                        }
-                    }
-                    await deleteTransactionFromFirestore(id);
-                }
-            );
-            return;
-        }
-    
-        // Lógica para o botão de apagar recorrência
-        const deleteRecurrenceButton = target.closest('.delete-recurrence-button');
-        if (deleteRecurrenceButton) {
-            const recurrenceId = deleteRecurrenceButton.dataset.recurrenceId;
-            showConfirmationModal(
-                "Confirmar Exclusão de Parcelas",
-                "Tem certeza que deseja excluir TODAS as parcelas desta recorrência? Esta ação não pode ser desfeita.",
-                async () => {
-                    const transactionsInRecurrence = transactions.filter(t => t.recurrenceId === recurrenceId);
-                    for (const t of transactionsInRecurrence) {
-                        if (t.type === 'caixinha' && t.caixinhaId) {
-                            const caixinha = categories.find(c => c.id === t.caixinhaId);
-                            if (caixinha) {
-                                if (t.transactionType === 'deposit') {
-                                    caixinha.savedAmount -= parseFloat(t.amount);
-                                } else if (t.transactionType === 'withdraw') {
-                                    caixinha.savedAmount += parseFloat(t.amount);
-                                }
-                            }
-                        }
-                    }
-                    await saveCategories();
-                    await deleteTransactionFromFirestore(null, recurrenceId);
-                }
-            );
-            return;
-        }
-    });
-
-
-    // Listener para formatar o input de valor da transação
-    transactionAmountInput.addEventListener('input', () => {
-        formatCurrencyInput(transactionAmountInput);
-    });
-
-    // --- Funções de Navegação por Mês ---
-    function updateMonthDisplay() {
-        currentMonthDisplay.textContent = formatMonthDisplay(currentMonth);
-    }
-
-    prevMonthButton.addEventListener('click', () => {
-        currentMonth.setMonth(currentMonth.getMonth() - 1);
-        updateMonthDisplay();
-        renderTransactions();
-        updateDashboardAndTransactionSummaries();
-        renderBudgets();
-    });
-
-    nextMonthButton.addEventListener('click', () => {
-        currentMonth.setMonth(currentMonth.getMonth() + 1);
-        updateMonthDisplay();
-        renderTransactions();
-        updateDashboardAndTransactionSummaries();
-        renderBudgets();
-    });
-
-
-    // --- Funções de Gerenciamento de Orçamento ---
-    function openBudgetModal(budget = null) {
-        budgetForm.reset();
-        budgetCategorySelect.innerHTML = '<option value="">Selecione uma categoria</option>';
-            
-        // Popula o select com apenas as categorias de despesa
-        const expenseCategories = categories.filter(c => c.type === 'expense');
-        expenseCategories.forEach(cat => {
-            // Impede que categorias já orçadas neste mês apareçam para novos orçamentos
-            const isAlreadyBudgeted = budgets.some(b => b.categoryId === cat.id && b.month === getCurrentMonthYYYYMM(currentMonth)); // Usa currentMonth
-            if (!budget && isAlreadyBudgeted) return; // Se não estiver editando e já houver orçamento, pula
-            const option = document.createElement('option');
-            option.value = cat.id;
-            option.textContent = cat.name;
-            budgetCategorySelect.appendChild(option);
-        });
-
-        if (budget) {
-            budgetModalTitle.textContent = 'Editar Orçamento';
-            budgetIdInput.value = budget.id;
-            budgetCategorySelect.value = budget.categoryId;
-            budgetCategorySelect.disabled = true; // Não permite mudar a categoria na edição
-            budgetAmountInput.value = (parseFloat(budget.amount) * 100).toFixed(0); // Coloca em centavos para formatCurrencyInput
-            formatCurrencyInput(budgetAmountInput); // Formata o valor
-        } else {
-            budgetModalTitle.textContent = 'Novo Orçamento Mensal';
-            budgetIdInput.value = '';
-            budgetCategorySelect.disabled = false;
-        }
-        budgetModal.classList.add('active');
-    }
-
-    function closeBudgetModal() {
-        budgetModal.classList.remove('active');
-    }
-
-    function renderBudgets() {
-        budgetListContainer.innerHTML = '';
-        const currentMonthYYYYMM = getCurrentMonthYYYYMM(currentMonth); // Usa currentMonth
-        const currentMonthBudgets = budgets.filter(b => b.month === currentMonthYYYYMM);
-        if (currentMonthBudgets.length === 0) {
-            budgetListContainer.innerHTML = '<p class="text-center text-gray-500 py-4 col-span-full">Nenhum orçamento configurado para este mês.</p>';
-            return;
-        }
-        noBudgetsMessage.classList.add('hidden'); // Esconde a mensagem se houver orçamentos
-
-        currentMonthBudgets.forEach(budget => {
-            const category = categories.find(c => c.id === budget.categoryId);
-            if (!category) return; // Pula se a categoria foi deletada
-            
-            // Calcula o gasto real para essa categoria no mês corrente
-            const totalSpent = transactions.filter(t => 
-                    t.categoryId === budget.categoryId && 
-                    t.type === 'expense' && // Apenas despesas
-                    t.date.startsWith(currentMonthYYYYMM) && // Filtra pelo mês atual
-                    (t.status === 'Pago' || t.status === 'Recebido' || t.status === 'Confirmado') // Apenas transações pagas/recebidas
-                ).reduce((sum, t) => sum + parseFloat(t.amount), 0);
-
-            const progress = budget.amount > 0 ? (totalSpent / budget.amount) * 100 : 0;
-            const remaining = budget.amount - totalSpent;
-            const progressBarColor = progress >= 100 ? 'bg-red-500' : (progress > 80 ? 'bg-yellow-500' : 'bg-green-500');
-            
-            const budgetCard = document.createElement('div');
-            budgetCard.className = 'bg-white p-4 rounded-lg shadow-md flex flex-col justify-between';
-            budgetCard.innerHTML = `
-                <div>
-                    <div class="flex items-center mb-2">
-                        <div class="w-4 h-4 rounded-full mr-2" style="background-color: ${category.color};"></div>
-                        <p class="font-semibold text-lg">${category.name}</p>
-                    </div>
-                    <div class="w-full bg-gray-200 rounded-full h-2.5 my-2">
-                        <div class="${progressBarColor} h-2.5 rounded-full" style="width: ${Math.min(100, progress)}%;"></div>
-                    </div>
-                    <div class="text-xs flex justify-between">
-                        <span class="text-gray-600">${formatCurrency(totalSpent)} de ${formatCurrency(budget.amount)}</span>
-                        <span class="font-bold ${remaining < 0 ? 'text-red-500' : 'text-green-600'}">${progress.toFixed(0)}%</span>
-                    </div>
-                </div>
-                <div class="flex justify-end mt-3">
-                    <button class="text-gray-500 hover:text-blue-500 p-1 rounded-full edit-budget-button" data-id="${budget.id}">
-                        <i class="fa-solid fa-pen-to-square"></i>
-                    </button>
-                    <button class="text-gray-500 hover:text-red-500 p-1 rounded-full delete-budget-button" data-id="${budget.id}">
-                        <i class="fa-solid fa-trash-can"></i>
-                    </button>
-                </div>
-            `;
-            budgetListContainer.appendChild(budgetCard);
-        });
-    }
-
-    // --- Funções de Chat e IA ---
-
-    /**
-     * Tenta executar uma chamada à API Gemini usando uma chave específica.
-     * Se a chave falhar com um erro de cota, tenta a próxima chave na lista.
-     * @param {object} payload - O corpo da requisição para a API Gemini.
-     * @param {number} attemptIndex - O índice da chave a ser tentada.
-     * @returns {Promise<object>} - O resultado da API em caso de sucesso.
-     * @throws {Error} - Se todas as chaves falharem.
-     */
-    async function tryNextApiKey(payload, attemptIndex) {
-        const validKeys = geminiApiKeys.filter(key => key && key.trim() !== '');
-        if (attemptIndex >= validKeys.length) {
-            throw new Error("Todas as chaves de API falharam ou estão sem cota.");
-        }
-
-        const apiKey = validKeys[attemptIndex];
-        const model = payload.generationConfig && payload.generationConfig.response_mime_type === "application/json" ? "gemini-1.5-flash-latest" : "gemini-1.5-flash-latest";
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-        
-        console.log(`Tentando API com a chave ${attemptIndex + 1} e modelo ${model}...`);
-
-        try {
-            const response = await fetch(apiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (!response.ok) {
-                // Se a resposta não for OK, trata como erro e tenta a próxima chave
-                const errorResult = await response.json();
-                const errorMessage = errorResult.error ? errorResult.error.message : response.statusText;
-                console.error(`Erro da API com a chave ${attemptIndex + 1}:`, errorMessage);
-
-                if (response.status === 429 || (errorMessage && errorMessage.includes("resource has been exhausted"))) {
-                    console.warn(`Chave ${attemptIndex + 1} atingiu o limite de cota. Tentando a próxima.`);
-                    return tryNextApiKey(payload, attemptIndex + 1);
-                }
-                // Outros erros
-                throw new Error(`Erro da API: ${errorMessage}`);
-            }
-
-            const result = await response.json();
-            
-            // Se a chave funcionou, atualiza o índice global e o indicador visual
-            currentGeminiApiKeyIndex = geminiApiKeys.indexOf(apiKey);
-            updateActiveApiKeyIndicator();
-            return result; // Retorna o resultado bem-sucedido
-
-        } catch (error) {
-            console.error(`Erro de rede ou desconhecido com a chave ${attemptIndex + 1}:`, error);
-            // Em caso de erro de rede, também tenta a próxima chave
-            return tryNextApiKey(payload, attemptIndex + 1);
-        }
-    }
-    
-    // Função para atualizar o indicador visual da chave de API ativa
-    function updateActiveApiKeyIndicator() {
-        const validKeys = geminiApiKeys.filter(key => key && key.trim() !== '');
-        if (validKeys.length > 0) {
-            activeApiKeyIndicator.textContent = `Chave ${currentGeminiApiKeyIndex + 1}/${validKeys.length}`;
-            activeApiKeyIndicator.classList.remove('hidden');
-        } else {
-            activeApiKeyIndicator.classList.add('hidden');
-        }
-    }
-
-    function appendMessage(sender, text, type = 'text') {
-        const messageDiv = document.createElement('div');
-        const bubbleDiv = document.createElement('div');
-
-        if (sender === 'user') {
-            messageDiv.className = 'flex justify-end';
-            bubbleDiv.className = 'bg-[var(--color-blue-primary)] text-white p-3 rounded-xl rounded-br-none max-w-xs md:max-w-md shadow-sm';
-        } else { // sender === 'ai' or 'model'
-            messageDiv.className = 'flex justify-start';
-            bubbleDiv.className = 'bg-gray-100 text-gray-800 p-3 rounded-xl rounded-bl-none max-w-xs md:max-w-md shadow-sm';
-            if (type === 'error') {
-                bubbleDiv.classList.add('bg-red-100', 'text-red-700', 'border', 'border-red-400');
-            }
-        }
-
-        // Usamos innerHTML para renderizar tags HTML básicas que o modelo de IA pode gerar
-        bubbleDiv.innerHTML = text; 
-        messageDiv.appendChild(bubbleDiv);
-        chatMessagesDiv.appendChild(messageDiv);
-
-        chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
-    }
-
-    // Função para obter dados financeiros formatados para a IA
-    function getFinancialDataForAI() {
-        let dataString = `A data de hoje é ${new Date().toLocaleDateString('pt-BR')}.\n\n`;
-    
-        // 1. Mapeia IDs de categoria para nomes para facilitar a leitura
-        const categoryMap = categories.reduce((map, cat) => {
-            map[cat.id] = cat.name;
-            return map;
-        }, {});
-    
-        // 2. Formata a lista de transações
-        dataString += "<strong>LISTA DE TODAS AS TRANSAÇÕES:</strong>\n";
-        if (transactions.length > 0) {
-            const formattedTransactions = transactions.map(t => {
-                const categoryName = categoryMap[t.categoryId] || 'Desconhecida';
-                return `- Descrição: ${t.description}, Valor: ${formatCurrency(t.amount)}, Data: ${t.date}, Categoria: ${categoryName}, Status: ${t.status}, Tipo: ${t.type}`;
-            }).join('\n');
-            dataString += formattedTransactions;
-        } else {
-            dataString += "Nenhuma transação registrada.\n";
-        }
-    
-        // 3. Formata a lista de orçamentos
-        dataString += "\n\n<strong>LISTA DE ORÇAMENTOS DO MÊS ATUAL:</strong>\n";
-        const currentMonthYYYYMM = getCurrentMonthYYYYMM(new Date());
-        const currentBudgets = budgets.filter(b => b.month === currentMonthYYYYMM);
-        if (currentBudgets.length > 0) {
-            const formattedBudgets = currentBudgets.map(b => {
-                const categoryName = categoryMap[b.categoryId] || 'Desconhecida';
-                const spent = transactions
-                    .filter(t => t.categoryId === b.categoryId && t.date.startsWith(currentMonthYYYYMM) && t.status === 'Pago')
-                    .reduce((sum, t) => sum + parseFloat(t.amount), 0);
-                return `- Categoria: ${categoryName}, Orçamento: ${formatCurrency(b.amount)}, Gasto: ${formatCurrency(spent)}`;
-            }).join('\n');
-            dataString += formattedBudgets;
-        } else {
-            dataString += "Nenhum orçamento configurado para o mês atual.\n";
-        }
-        
-        // 4. Formata a lista de Caixinhas
-        dataString += "\n\n<strong>LISTA DE CAIXINHAS (METAS DE POUPANÇA):</strong>\n";
-        const caixinhas = categories.filter(c => c.type === 'caixinha');
-        if(caixinhas.length > 0){
-            const formattedCaixinhas = caixinhas.map(c => {
-                 return `- Nome: ${c.name}, Valor Guardado: ${formatCurrency(c.savedAmount || 0)}, Meta: ${formatCurrency(c.targetAmount || 0)}`;
-            }).join('\n');
-            dataString += formattedCaixinhas;
-        } else {
-            dataString += "Nenhuma caixinha criada.\n";
-        }
-    
-        dataString += "\n--- Fim dos Dados Financeiros ---\n";
-        return dataString;
-    }
-
-    async function sendChatMessage(userMessage) {
-        if (isSendingMessage) {
-            return;
-        }
-
-        if (userMessage.trim() === "") return;
-
-        const validKeys = geminiApiKeys.filter((key) => key && key.trim() !== "");
-        if (!isGeminiApiReady || validKeys.length === 0) {
-            appendMessage(
-                "ai",
-                'O assistente de IA não está configurado. Por favor, insira pelo menos uma chave de API válida em "Mais Opções".',
-                "error"
-            );
-            return;
-        }
-
-        isSendingMessage = true;
-        appendMessage("user", userMessage);
-        chatInput.value = "";
-        chatLoadingIndicator.classList.remove("hidden");
-
-        const persona = aiConfig.aiPersona || "";
-        const personality = aiConfig.aiPersonality || "";
-
-        const baseSystemInstruction = `Você é um assistente financeiro especialista, agindo como o "cérebro" de um aplicativo de finanças. Sua única função é ANALISAR os dados financeiros fornecidos e responder às perguntas do usuário com base NESSES DADOS. Você não adiciona, edita ou apaga nada.
-
-<strong>REGRAS DE COMPORTAMENTO CRÍTICAS:</strong>
-1.  <strong>SEM SAUDAÇÕES:</strong> NÃO comece suas respostas com "Olá!", "Oi," ou qualquer outra saudação. Vá direto ao ponto.
-2.  <strong>BASEADO EM DADOS:</strong> Suas respostas devem ser 100% baseadas nos dados fornecidos na seção "DADOS FINANCEIROS COMPLETOS DO USUÁRIO". NUNCA invente informações.
-3.  <strong>INTELIGÊNCIA CONTEXTUAL:</strong> Use a "data de hoje" fornecida para determinar se as despesas pendentes estão atrasadas. Compare a data da transação com a data de hoje.
-4.  <strong>NÃO PEÇA INFORMAÇÕES:</strong> Você já tem todos os dados. NUNCA peça ao usuário para registrar transações ou fornecer informações que já estão na lista. Em vez disso, analise a lista que você recebeu. Se uma informação não está lá, diga que não a encontrou nos dados.
-5.  <strong>SEJA UM ANALISTA:</strong> Aja como um especialista. Identifique tendências, gastos excessivos, contas atrasadas e oportunidades de economia.
-6.  <strong>PERSONA:</strong> Siga estritamente o papel e o tom definidos abaixo.
-    *   <strong>Personagem:</strong> ${persona}
-    *   <strong>Personalidade:</strong> ${personality}
-7.  <strong>FORMATAÇÃO HTML:</strong> É CRÍTICO e OBRIGATÓRIO que você use apenas HTML básico (<strong>, <br>, <ul>, <li>) para formatar. NUNCA, em hipótese alguma, use Markdown (*, **, _, #). O uso de Markdown quebrará a exibição para o usuário.
-
----
-<strong>GLOSSÁRIO (obrigatório conhecer):</strong>
-- <strong>Caixinha:</strong> Meta de poupança. O dinheiro guardado aqui não faz parte do saldo geral disponível.
-- <strong>Orçamento:</strong> Limite de gastos para uma categoria específica no mês.
-- <strong>Despesa Pendente:</strong> Uma conta que ainda não foi paga. Você deve verificar a data dela contra a "data de hoje" para ver se está atrasada.
----`;
-
-
-        let currentFinancialData = "";
-        const refreshKeywords = ["atualizar dados", "recarregar dados", "consultar dados", "verificar finanças", "novos dados", "dados atuais", "meus dados", "favor, atualize meus dados financeiros"]; 
-
-        const needsRefresh = refreshKeywords.some(keyword => userMessage.toLowerCase().includes(keyword));
-
-        if (!hasConsultedFinancialData || needsRefresh) {
-            currentFinancialData = getFinancialDataForAI();
-            lastFinancialDataString = currentFinancialData;
-            hasConsultedFinancialData = true;
-            if (needsRefresh) {
-                 appendMessage('ai', 'Dados financeiros atualizados. Como posso te ajudar?', 'info');
-            } else {
-                 appendMessage('ai', 'Analisando seus dados financeiros para a nossa conversa. Um momento...', 'info');
-            }
-        }
-
-        const contentsPayload = [...chatHistory];
-        const userPromptWithData = `DADOS FINANCEIROS COMPLETOS DO USUÁRIO:\n${lastFinancialDataString}\n\nMENSAGEM DO USUÁRIO:\n${userMessage}`;
-        contentsPayload.push({ role: "user", parts: [{ text: userPromptWithData }] });
-        
-        const payload = {
-            systemInstruction: { role: "system", parts: [{ text: baseSystemInstruction }] },
-            contents: contentsPayload, 
-            generationConfig: {
-                temperature: 0.7, 
-                topK: 40,
-                topP: 0.95,
-                maxOutputTokens: 800
-            },
-            safetySettings: [ 
-                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
-            ]
-        };
-
-        try {
-            let result = await tryNextApiKey(payload, currentGeminiApiKeyIndex);
-        
-            if (result && result.candidates && result.candidates[0].content.parts[0].text) {
-                const finalResponse = result.candidates[0].content.parts[0].text;
-                appendMessage('ai', finalResponse);
-                // Adiciona a pergunta do usuário e a resposta do modelo ao histórico
-                chatHistory.push({ role: "user", parts: [{ text: userMessage }] }); // Salva a pergunta original, sem os dados
-                chatHistory.push({ role: "model", parts: [{ text: finalResponse }] });
-            } else if (result.error) {
-                throw new Error(result.error.message || 'Erro desconhecido da API Gemini.');
-            } else if (!result.candidates || result.candidates.length === 0) {
-                 throw new Error('Não foi possível obter uma resposta válida da IA.');
-            }
-
-        } catch (error) {
-            console.error('Erro ao chamar a API Gemini:', error);
-            appendMessage('ai', `Erro de comunicação com a IA. ${error.message}`, 'error');
-        } finally {
-            if (chatHistory.length > 20) {
-                chatHistory = chatHistory.slice(chatHistory.length - 20);
-            }
-            chatLoadingIndicator.classList.add('hidden');
-            chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
-            isSendingMessage = false; 
-            // Não resetar hasConsultedFinancialData aqui, para manter os dados na conversa.
-        }
-    }
-
-
-    // --- Funções de Insights Financeiros ---
-    async function generateFinancialInsights() {
-        insightsContentArea.innerHTML = `
-            <div class="text-center text-gray-500 py-2">
-                <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
-                Gerando insights...
-            </div>
-        `;
-
-        const validKeys = geminiApiKeys.filter(key => key && key.trim() !== '');
-        if (!isGeminiApiReady || validKeys.length === 0) {
-            insightsContentArea.innerHTML = '<p class="text-red-500">O assistente de IA não está configurado. Por favor, insira sua chave da API Gemini nas "Mais Opções".</p>';
-            return;
-        }
-
-        // Obtém os dados financeiros atualizados para os insights
-        const financialData = getFinancialDataForAI();
-
-        const insightPrompt = `
-            Analise os dados financeiros a seguir.
-            Sua tarefa é fornecer um insight CURTO e ACIONÁVEL em no máximo 3 frases.
-            Foque em apenas UM ponto principal: o maior gasto, uma oportunidade de economia ou um alerta importante (como contas pendentes atrasadas).
-            
-            REGRAS DE FORMATAÇÃO (OBRIGATÓRIO):
-            1.  **Use APENAS tags HTML**.
-            2.  Use <strong> para títulos ou alertas. Ex: <strong>Alerta de Gastos</strong>.
-            3.  Use <br> para quebras de linha.
-            4.  **NUNCA, EM HIPÓTESE ALGUMA, use Markdown (*, **, _, #, etc.)**. O uso de Markdown quebrará a interface.
-
-            DADOS PARA ANÁLISE:
-            ${financialData}
-        `;
-
-        const payload = {
-            contents: [{ role: "user", parts: [{ text: insightPrompt }] }],
-            generationConfig: {
-                temperature: 0.7, 
-                topK: 40,
-                topP: 0.95,
-                maxOutputTokens: 800
-            },
-            safetySettings: [ 
-                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
-            ]
-        };
-
-        try {
-            const result = await tryNextApiKey(payload, currentGeminiApiKeyIndex);
-
-            if (result.candidates && result.candidates.length > 0 &&
-                result.candidates[0].content && result.candidates[0].content.parts &&
-                result.candidates[0].content.parts.length > 0 && result.candidates[0].content.parts[0].text) {
-                const aiResponseText = result.candidates[0].content.parts[0].text;
-                insightsContentArea.innerHTML = aiResponseText;
-            } else if (result.error) {
-                insightsContentArea.innerHTML = `<p class="text-red-500">Erro da API: ${result.error.message || 'Erro desconhecido da API Gemini.'}</p>`;
-                console.error('Erro da API Gemini para Insights:', result.error);
-            } else {
-                insightsContentArea.innerHTML = '<p class="text-red-500">Não foi possível gerar insights financeiros neste momento.</p>';
-            }
-        } catch (error) {
-            insightsContentArea.innerHTML = `<p class="text-red-500">Erro ao comunicar com a IA para insights. ${error.message || 'Verifique sua conexão.'}</p>`;
-            console.error('Erro ao chamar a API Gemini para Insights:', error);
-        }
-    }
-    
-    // --- Funções do Modal de Otimização de Orçamento com IA (NOVA) ---
-    async function openBudgetOptimizationModal() {
-        budgetOptimizationModal.classList.add('active');
-        budgetOptimizationText.innerHTML = '';
-        budgetOptimizationLoadingIndicator.classList.remove('hidden');
-
-        const validKeys = geminiApiKeys.filter(key => key && key.trim() !== '');
-        if (!isGeminiApiReady || validKeys.length === 0) {
-            budgetOptimizationText.innerHTML = '<p class="text-red-500">O assistente de IA não está configurado. Por favor, insira sua chave da API Gemini nas "Mais Opções".</p>';
-            budgetOptimizationLoadingIndicator.classList.add('hidden');
-            return;
-        }
-
-        let budgetDataString = "";
-        if (budgets.length > 0) {
-            budgetDataString += "<strong>Orçamentos configurados:</strong><br><br>";
-            budgets.forEach(budget => {
-                const category = categories.find(c => c.id === budget.categoryId);
-                const categoryName = category ? category.name : 'Categoria Desconhecida';
-                const actualSpent = transactions.filter(t => 
-                    t.categoryId === budget.categoryId && t.type === 'expense' && (t.status === 'Pago' || t.status === 'Recebido' || t.status === 'Confirmado')
-                ).reduce((sum, t) => sum + parseFloat(t.amount), 0);
-                const remaining = budget.amount - actualSpent; // Use budget.amount
-                budgetDataString += `- Categoria: ${categoryName}, Orçado: ${formatCurrency(budget.amount)}, Gasto Real: ${formatCurrency(actualSpent)}, Saldo: ${formatCurrency(remaining)}<br>`;
-            });
-        } else {
-            budgetDataString += "Nenhum orçamento configurado. Por favor, configure alguns orçamentos para obter sugestões.<br>";
-        }
-        budgetDataString += "<br>--- Fim dos Dados de Orçamento ---<br><br>";
-
-        const optimizationPrompt =
-            `Com base nos seguintes dados de orçamento do usuário, forneça sugestões claras e acionáveis para otimizar os gastos e gerenciar melhor o dinheiro. ` +
-            `Seja direto, prático e objetivo, como um consultor financeiro que não hesita em apontar onde o usuário pode melhorar. ` +
-            `Use títulos em negrito (<strong>), listas não ordenadas (<ul>, <li>) e quebras de linha (<br>). ` +
-            `NUNCA use Markdown (*, **, _, #, etc.). ` +
-            `Aqui estão os dados: <br><br>${budgetDataString}`;
-
-        const payload = {
-            contents: [{ role: "user", parts: [{ text: optimizationPrompt }] }],
-            generationConfig: {
-                temperature: 0.7,
-                topK: 40,
-                topP: 0.95,
-                maxOutputTokens: 800
-            },
-            safetySettings: [
-                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" },
-            ]
-        };
-
-        try {
-            const result = await tryNextApiKey(payload, currentGeminiApiKeyIndex);
-            
-            if (result.candidates && result.candidates.length > 0 &&
-                result.candidates[0].content && result.candidates[0].content.parts &&
-                result.candidates[0].content.parts.length > 0 && result.candidates[0].content.parts[0].text) {
-                const aiResponseText = result.candidates[0].content.parts[0].text;
-                budgetOptimizationText.innerHTML = aiResponseText;
-            } else if (result.error) {
-                budgetOptimizationText.innerHTML = `<p class="text-red-500">Erro da API: ${result.error.message || 'Erro desconhecido da API Gemini.'}</p>`;
-                console.error('Erro da API Gemini para Otimização de Orçamento:', result.error);
-            } else {
-                budgetOptimizationText.innerHTML = '<p class="text-red-500">Não foi possível gerar sugestões de otimização de orçamento neste momento.</p>';
-            }
-        } catch (error) {
-            budgetOptimizationText.innerHTML = `<p class="text-red-500">Erro ao comunicar com a IA para otimização. ${error.message || 'Verifique sua conexão.'}</p>`;
-            console.error('Erro ao chamar a API Gemini para Otimização de Orçamento:', error);
-        } finally {
-            budgetOptimizationLoadingIndicator.classList.add('hidden');
-        }
-    }
-
-    function closeBudgetOptimizationModal() {
-        budgetOptimizationModal.classList.remove('active');
-    }
-
-    // --- Funções do Modal de Chave de API ---
-    function openApiKeysModal() {
-        apiKeysModal.classList.add('active');
-        // As chaves serão carregadas automaticamente pelo onSnapshot em loadAllDataFromFirestore
-        // e os modalApiKeyInputs.value serão atualizados por ele.
-    }
-
-    function closeApiKeysModal() {
-        apiKeysModal.classList.remove('active');
-    }
-
-    function updateApiModalStatus(message, type = 'info') {
-        apiModalStatusMessageDiv.classList.remove('hidden', 'bg-blue-100', 'border-blue-500', 'text-blue-700', 'bg-green-100', 'border-green-500', 'text-green-700', 'bg-red-100', 'border-red-500', 'text-red-700');
-        
-        if (type === 'info') {
-            apiModalStatusMessageDiv.classList.add('bg-blue-100', 'border-blue-500', 'text-blue-700');
-        } else if (type === 'success') {
-            apiModalStatusMessageDiv.classList.add('bg-green-100', 'border-green-500', 'text-green-700');
-        } else if (type === 'error') {
-            apiModalStatusMessageDiv.classList.add('bg-red-100', 'border-red-500', 'text-red-700');
-        }
-        
-        apiModalMessageText.textContent = message;
-        apiModalStatusMessageDiv.classList.remove('hidden');
-
-        setTimeout(() => {
-            apiModalStatusMessageDiv.classList.add('hidden');
-        }, 5000);
-    }
-
-    // --- Configuração e Inicialização do Firebase ---
-    async function initializeFirebase() {
-        try {
-            app = initializeApp(firebaseConfig);
-            db = getFirestore(app);
-            auth = getAuth(app);
-            console.log("Firebase Config usada:", firebaseConfig);
-            console.log("Initial Auth Token:", initialAuthToken);
-
-            onAuthStateChanged(auth, async (user) => {
-                if (user) {
-                    // Usuário está logado (seja por token, e-mail/senha, ou sessão anterior)
-                    userId = user.uid;
-                    isAuthReady = true;
-                    loginScreen.classList.add('hidden');
-                    console.log("Usuário autenticado:", userId);
-                    await loadAllDataFromFirestore();
-                    showSplashScreen(); // MOSTRA O SPLASH APÓS O LOGIN
-                } else {
-                    // Nenhum usuário logado
-                    userId = null;
-                    isAuthReady = false;
-                    splashScreen.classList.add('hidden');
-                    appContent.classList.add('hidden');
-                    loginScreen.classList.remove('hidden'); // MOSTRA A TELA DE LOGIN
-                    console.log("Usuário não autenticado. Mostrando tela de login.");
-                }
-            });
-
-            // Tenta logar com token apenas se ele existir E NÃO HOUVER um usuário corrente
-            if (initialAuthToken && !auth.currentUser) {
-                try {
-                    await signInWithCustomToken(auth, initialAuthToken);
-                    console.log("Autenticação com token inicial bem-sucedida.");
-                } catch (error) {
-                    console.error("Falha na autenticação com o token inicial.", error);
-                    let errorMessage = `Erro de autenticação: ${error.message}.`;
-                    if (error.code === 'auth/custom-token-mismatch' || error.code === 'auth/invalid-custom-token') {
-                        errorMessage += " Verifique as configurações do Firebase ou gere um novo token.";
-                    }
-                    loginErrorMessage.textContent = errorMessage;
-                    loginErrorMessage.classList.remove('hidden');
-                }
-            } else if (!auth.currentUser) {
-                 // Não faz nada se não houver token e nenhum usuário. O login será exibido pelo onAuthStateChanged.
-                console.log("Nenhum token inicial e nenhum usuário logado. Aguardando interação.");
-            }
-
-        } catch (error) {
-            console.error("Erro ao inicializar Firebase:", error);
-            loginErrorMessage.textContent = `Erro crítico ao iniciar a aplicação: ${error.message}`;
-            loginErrorMessage.classList.remove('hidden');
-        }
-    }
-
-    // Event listener para o formulário de login
-    if (loginForm) {
-        loginForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const email = loginEmailInput.value;
-            const password = loginPasswordInput.value;
-            try {
-                await signInWithEmailAndPassword(auth, email, password);
-                loginErrorMessage.classList.add('hidden'); // Limpa a mensagem de erro se o login for bem-sucedido
-            } catch (error) {
-                let message = 'Erro ao fazer login. Verifique o seu e-mail e palavra-passe.';
-                if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
-                    message = 'E-mail ou palavra-passe inválidos.';
-                } else if (error.code === 'auth/invalid-email') {
-                    message = 'Formato de e-mail inválido.';
-                } else if (error.code === 'auth/operation-not-allowed') {
-                    message = 'A operação de login por e-mail/palavra-passe não está ativada no seu projeto Firebase.';
-                }
-                loginErrorMessage.textContent = message;
-                loginErrorMessage.classList.remove('hidden');
-                console.error("Erro de login:", error.message, error.code);
-            }
-        });
-    }
-
-    // Event listener para o botão de logout (desktop)
-    if (logoutButtonDesktop) {
-        logoutButtonDesktop.addEventListener('click', async () => {
-            try {
-                await signOut(auth);
-                console.log("Utilizador desconectado com sucesso.");
-                // UI will be handled by onAuthStateChanged listener
-            } catch (error) {
-                console.error("Erro ao desconectar:", error.message);
-            }
-        });
-    }
-
-    // Event listener para o botão de logout (mobile)
-    if (logoutButtonMobile) {
-        logoutButtonMobile.addEventListener('click', async () => {
-            try {
-                await signOut(auth);
-                console.log("Utilizador desconectado com sucesso.");
-                // UI will be handled by onAuthStateChanged listener
-            } catch (error) {
-                console.error("Erro ao desconectar:", error.message);
-            }
-        });
-    }
-
-
-    // Carregar a página inicial (dashboard) ao carregar (inicialmente oculto até logar)
-    // showPage('dashboard'); // Esta chamada será feita dentro do onAuthStateChanged
-
-    // Atualizar o estado do chat ao carregar a página
-    updateChatUIState();
-    
-    navLinks.forEach(link => {
+};
+
+/**
+ * Adiciona listeners de evento para todos os links de navegação.
+ */
+const setupNavigationListeners = () => {
+    document.querySelectorAll('[data-page]').forEach(link => {
         link.addEventListener('click', (e) => {
-            e.preventDefault(); 
-            const pageId = e.currentTarget.dataset.page;
-            showPage(pageId);
-        });
-    });
-
-    // Event listeners para o chat
-    if (sendButton) {
-        sendButton.addEventListener('click', () => sendChatMessage(chatInput.value));
-    }
-    if (chatInput) {
-        chatInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                sendChatMessage(chatInput.value);
-            }
-        });
-    }
-    // Event listener para o novo botão de atualizar dados do chat
-    if (refreshChatDataButton) {
-        refreshChatDataButton.addEventListener('click', () => {
-            chatHistory = []; 
-            hasConsultedFinancialData = false;
-            sendChatMessage("Por favor, atualize os meus dados financeiros.");
-        });
-    }
-    
-    if (clearChatButton) {
-        clearChatButton.addEventListener('click', () => {
-            chatMessagesDiv.innerHTML = '';
-            chatHistory = []; // Limpa o histórico da sessão
-            hasConsultedFinancialData = false; // Permite que a próxima mensagem recarregue os dados
-            appendMessage('ai', 'Chat limpo. Como posso te ajudar a começar de novo?', 'info');
-        });
-    }
-
-    // NOVO: Event listener para o botão de voltar do chat
-    if (chatBackButton) {
-        chatBackButton.addEventListener('click', () => {
-            showPage('dashboard'); // Volta para a Visão Geral
-        });
-    }
-
-
-    // Event listener para o novo botão de Gerar Insights Financeiros
-    if (generateInsightsButton) {
-        generateInsightsButton.addEventListener('click', generateFinancialInsights);
-    }
-
-    // Event listener para o novo botão de Otimizar Orçamento
-    if (optimizeBudgetButton) {
-        optimizeBudgetButton.addEventListener('click', openBudgetOptimizationModal);
-    }
-
-    // Event listeners do Modal de Otimização de Orçamento
-    if (closeBudgetOptimizationModalButton) {
-        closeBudgetOptimizationModalButton.addEventListener('click', closeBudgetOptimizationModal);
-    }
-    if (closeBudgetOptimizationButton) {
-        closeBudgetOptimizationButton.addEventListener('click', closeBudgetOptimizationButton);
-    }
-
-
-    // Função para atualizar o estado da UI do chat (habilitado/desabilitado)
-    function updateChatUIState() {
-        const hasValidKey = geminiApiKeys.some(key => key.trim() !== '');
-        if (hasValidKey) {
-            isGeminiApiReady = true;
-            chatInput.disabled = false;
-            sendButton.disabled = false;
-            refreshChatDataButton.disabled = false;
-            chatInput.placeholder = "Digite a sua mensagem...";
-            // Verifica se a mensagem de "insira a sua chave" ainda está presente e a remove
-            const initialAiMessage = chatMessagesDiv.querySelector('.flex.justify-start .bg-gray-100');
-            if (initialAiMessage && initialAiMessage.textContent.includes('Por favor, insira sua chave')) {
-                chatMessagesDiv.innerHTML = ''; // Limpa a div de mensagens
-                appendMessage('ai', 'Assistente de IA pronto! Como posso ajudar?', 'info');
-            }
-            updateActiveApiKeyIndicator(); // Mostra o indicador
-        } else {
-            isGeminiApiReady = false;
-            chatInput.disabled = true;
-            sendButton.disabled = true;
-            refreshChatDataButton.disabled = true;
-            chatInput.placeholder = "Assistente não configurado...";
-            activeApiKeyIndicator.classList.add('hidden'); // Esconde o indicador
-        }
-    }
-
-
-    // Event listeners do Modal de Categoria
-    if (addCategoryButton) {
-        addCategoryButton.addEventListener('click', () => openCategoryModal());
-    }
-    if (closeCategoryModalButton) {
-        closeCategoryModalButton.addEventListener('click', closeCategoryModal);
-    }
-    if (cancelCategoryButton) {
-        cancelCategoryButton.addEventListener('click', closeCategoryModal);
-    }
-
-    // Event listeners do Modal de Transação e FAB
-    if (fabButton) {
-        fabButton.addEventListener('click', () => openTransactionModal());
-    }
-    if (closeTransactionModalButton) {
-        closeTransactionModalButton.addEventListener('click', closeTransactionModal);
-    }
-    // Listener para os botões da Etapa 1
-    document.querySelectorAll('.step-1-type-button').forEach(button => {
-        button.addEventListener('click', () => {
-            // Remove a classe 'selected' de todos os botões e adiciona ao clicado
-            document.querySelectorAll('.step-1-type-button').forEach(btn => btn.classList.remove('selected'));
-            button.classList.add('selected');
-
-            const type = button.dataset.type;
-            // Marca o radio oculto correspondente
-            document.querySelector(`input[name="transaction-type"][value="${type}"]`).checked = true;
-                    
-            // Atualiza o título e as categorias da Etapa 2
-            const titleMap = {
-                income: 'Nova Receita',
-                expense: 'Nova Despesa',
-                deposit: 'Guardar Dinheiro',
-                withdraw: 'Resgatar Dinheiro'
-            };
-            step2Title.textContent = titleMap[type];
-            populateTransactionCategories(type); // Função que já deve existir no seu código
-                    
-            goToStep(2);
-        });
-    });
-    // Listeners para os botões "Continuar"
-    document.querySelectorAll('.step-next-button').forEach(button => {
-        button.addEventListener('click', () => {
-            goToStep(currentStep + 1, true); // Preserve state when moving forward
-        });
-    });
-    // Listeners para os botões "Voltar"
-    document.querySelectorAll('.step-back-button').forEach(button => {
-        button.addEventListener('click', () => {
-            goToStep(currentStep - 1, true); // Preserve state when moving back
-        });
-    });
-    // Listener para o botão de cancelar da Etapa 1
-    document.getElementById('cancel-transaction-button-step1').addEventListener('click', closeTransactionModal);
-
-
-    // Event listeners do Modal de Chave de API
-    if (apiManagementLink) {
-        apiManagementLink.addEventListener('click', (e) => {
             e.preventDefault();
-            openApiKeysModal();
+            const pageId = link.dataset.page;
+            // Se o link já estiver ativo, não faz nada
+            if (link.classList.contains('active') && pageId !== 'chat') return;
+            navigateToPage(pageId);
         });
-    }
-    if (closeApiKeysModalButton) {
-        closeApiKeysModalButton.addEventListener('click', closeApiKeysModal);
-    }
-    if (saveApiKeysModalButton) {
-        saveApiKeysModalButton.addEventListener('click', saveApiKeys);
-    }
+    });
 
-    if (saveAiConfigButton) {
-        saveAiConfigButton.addEventListener('click', saveAiConfig);
+    // Listener para o botão de voltar na tela de chat (mobile)
+    document.getElementById('chat-back-button').addEventListener('click', () => {
+        navigateToPage('dashboard');
+    });
+};
+
+// ================================================================================================
+// LÓGICA DE AUTENTICAÇÃO E INICIALIZAÇÃO DO APP
+// ================================================================================================
+
+/**
+ * Simula o processo de login.
+ * @param {string} email - O email do usuário.
+ * @param {string} password - A senha do usuário.
+ */
+const handleLogin = (email, password) => {
+    // Em uma aplicação real, aqui você chamaria:
+    // signInWithEmailAndPassword(auth, email, password)
+    // .then((userCredential) => { ... })
+    // .catch((error) => { ... });
+
+    const errorMessageDiv = document.getElementById('login-error-message');
+    // Validação simples para simulação
+    if (email && password) {
+        errorMessageDiv.classList.add('hidden');
+        // Sucesso simulado, o onAuthStateChanged cuidará do resto
+        console.log("Login simulado com sucesso.");
+    } else {
+        errorMessageDiv.textContent = "Email e senha são obrigatórios.";
+        errorMessageDiv.classList.remove('hidden');
     }
-    
-    transactionDateInput.valueAsDate = new Date();
+};
 
-    // Event listeners para o novo modal de orçamento
-    document.getElementById('configure-budget-button').addEventListener('click', () => openBudgetModal());
-    closeBudgetModalButton.addEventListener('click', closeBudgetModal);
-    cancelBudgetButton.addEventListener('click', closeBudgetModal);
-    budgetAmountInput.addEventListener('input', () => formatCurrencyInput(budgetAmountInput));
+/**
+ * Simula o processo de logout.
+ */
+const handleLogout = () => {
+    // Em uma aplicação real, aqui você chamaria:
+    // signOut(auth).then(() => { ... })
+    auth.currentUser = null;
+    // Recarrega a página para simular o estado de "não logado"
+    window.location.reload();
+};
 
-    budgetForm.addEventListener('submit', async (e) => {
+/**
+ * Inicializa a aplicação principal após o login do usuário.
+ * @param {object} user - O objeto de usuário do Firebase.
+ */
+const initializeApp = (user) => {
+    appState.user = user;
+    console.log("App inicializado para o usuário:", user.uid);
+
+    // Carrega todos os dados do usuário (simulação)
+    loadAllData().then(() => {
+        // Após carregar os dados, renderiza a aplicação
+        updateDashboard();
+        updateTransactionsView();
+        updateCategoriesView();
+        updateBudgetsView();
+        setupAIAssistant();
+        loadAIConfig(); // Carrega configurações da IA
+
+        // Exibe o conteúdo principal e esconde a tela de login
+        document.getElementById('login-screen').classList.add('hidden');
+        document.getElementById('app-content').classList.remove('hidden');
+
+        // Exibe o botão flutuante de adicionar transação
+        document.getElementById('fab-add-transaction').classList.remove('hidden');
+
+        // Navega para a página inicial com base na URL ou padrão
+        const initialPage = window.location.hash.substring(1) || 'dashboard';
+        navigateToPage(initialPage);
+    });
+};
+
+/**
+ * Gerencia o estado de autenticação, mostrando a tela de login ou a aplicação.
+ */
+const manageAuthState = () => {
+    auth.onAuthStateChanged(user => {
+        if (user) {
+            // Usuário está logado, inicializa o app
+            initializeApp(user);
+        } else {
+            // Usuário não está logado, exibe a tela de login
+            document.getElementById('login-screen').classList.remove('hidden');
+            document.getElementById('app-content').classList.add('hidden');
+            document.getElementById('fab-add-transaction').classList.add('hidden');
+        }
+    });
+
+    // Adiciona listener para o formulário de login
+    document.getElementById('login-form').addEventListener('submit', (e) => {
         e.preventDefault();
-        const id = budgetIdInput.value;
-        const categoryId = budgetCategorySelect.value;
-        const amount = parseFloat(budgetAmountInput.value.replace(/\./g, '').replace(',', '.'));
-        
-        if (!categoryId || isNaN(amount) || amount <= 0) {
-            showConfirmationModal("Erro de Validação", "Por favor, selecione uma categoria e insira um valor válido.", () => {});
-            return;
-        }
-
-        // Verifica se já existe um orçamento para a categoria no mês atual, se não for edição
-        if (!id) {
-            const isAlreadyBudgeted = budgets.some(b => b.categoryId === categoryId && b.month === getCurrentMonthYYYYMM(currentMonth)); // Usa currentMonth
-            if (isAlreadyBudgeted) {
-                showConfirmationModal("Orçamento Existente", "Já existe um orçamento para esta categoria neste mês. Por favor, edite o orçamento existente ou selecione outra categoria.", () => {});
-                return;
-            }
-        }
-
-        if (id) { // Editando
-            const index = budgets.findIndex(b => b.id === id);
-            if (index !== -1) {
-                budgets[index].amount = amount;
-            }
-        } else { // Criando
-            const newBudget = {
-                id: generateUUID(),
-                categoryId: categoryId,
-                amount: amount,
-                month: getCurrentMonthYYYYMM(currentMonth) // Usa currentMonth
-            };
-            budgets.push(newBudget);
-        }
-        await saveBudgets(); // Função que salva o array 'budgets' no Firestore
-        closeBudgetModal();
+        const email = document.getElementById('login-email').value;
+        const password = document.getElementById('login-password').value;
+        handleLogin(email, password);
     });
 
-    // Adicione delegação de eventos para os botões de editar/excluir orçamentos
-    budgetListContainer.addEventListener('click', (e) => {
-        const editButton = e.target.closest('.edit-budget-button');
-        if (editButton) {
-            const id = editButton.dataset.id;
-            const budgetToEdit = budgets.find(b => b.id === id);
-            if (budgetToEdit) {
-                openBudgetModal(budgetToEdit);
-            }
-        }
-        const deleteButton = e.target.closest('.delete-budget-button');
-        if (deleteButton) {
-            const id = deleteButton.dataset.id;
-            showConfirmationModal('Excluir Orçamento', 'Tem certeza que deseja excluir este orçamento?', async () => {
-                budgets = budgets.filter(b => b.id !== id);
-                await saveBudgets();
-            });
-        }
-    });
+    // Adiciona listeners para os botões de logout
+    document.getElementById('logout-button-desktop').addEventListener('click', handleLogout);
+    document.getElementById('logout-button-mobile').addEventListener('click', handleLogout);
+};
 
-    // --- Funções e Listeners de Filtros (NOVO) ---
-    function populateFilterCategories() {
-        filterCategorySelect.innerHTML = '<option value="all">Todas as Categorias</option>';
-        categories.forEach(cat => {
-            const option = document.createElement('option');
-            option.value = cat.id;
-            option.textContent = cat.name;
-            filterCategorySelect.appendChild(option);
-        });
+// ================================================================================================
+// CARREGAMENTO DE DADOS (SIMULAÇÃO)
+// ================================================================================================
+
+/**
+ * Carrega todos os dados (categorias, transações, orçamentos) da fonte de dados (Firestore).
+ * Aqui, estamos usando dados de exemplo salvos no localStorage.
+ */
+const loadAllData = async () => {
+    // Em uma aplicação real:
+    // const categoriesQuery = query(collection(db, `users/${appState.user.uid}/categories`));
+    // const transactionsQuery = query(collection(db, `users/${appState.user.uid}/transactions`));
+    // const budgetsQuery = query(collection(db, `users/${appState.user.uid}/budgets`));
+    // const [categoriesSnapshot, transactionsSnapshot, budgetsSnapshot] = await Promise.all([
+    //     getDocs(categoriesQuery),
+    //     getDocs(transactionsQuery),
+    //     getDocs(budgetsQuery)
+    // ]);
+    // appState.categories = categoriesSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    // ... e assim por diante
+
+    // Para simulação, carregamos do localStorage ou usamos dados padrão
+    appState.categories = JSON.parse(localStorage.getItem('financas-claras-categories')) || getSampleCategories();
+    appState.transactions = JSON.parse(localStorage.getItem('financas-claras-transactions')) || getSampleTransactions();
+    appState.budgets = JSON.parse(localStorage.getItem('financas-claras-budgets')) || [];
+
+    // Salva os dados de exemplo no localStorage se for a primeira vez
+    if (!localStorage.getItem('financas-claras-categories')) {
+        saveData('categories');
+        saveData('transactions');
     }
-    
-    filterTypeSelect.addEventListener('change', renderTransactions);
-    filterCategorySelect.addEventListener('change', renderTransactions);
-    filterStatusSelect.addEventListener('change', renderTransactions);
-    resetFiltersButton.addEventListener('click', () => {
-        filterTypeSelect.value = 'all';
-        filterCategorySelect.value = 'all';
-        filterStatusSelect.value = 'all';
-        renderTransactions();
+};
+
+/**
+ * Salva um tipo de dado específico no localStorage.
+ * @param {'categories' | 'transactions' | 'budgets'} dataType - O tipo de dado a salvar.
+ */
+const saveData = (dataType) => {
+    localStorage.setItem(`financas-claras-${dataType}`, JSON.stringify(appState[dataType]));
+};
+
+// ================================================================================================
+// LÓGICA DO DASHBOARD E GRÁFICOS
+// ================================================================================================
+
+let expenseChart = null; // Variável global para o gráfico
+let chartCurrentDate = new Date(); // Data para controle do mês do gráfico
+
+/**
+ * Atualiza todos os cards e o gráfico do painel de análise.
+ */
+const updateDashboard = () => {
+    updateDashboardCards();
+    renderExpenseChart();
+    updateChartMonthDisplay();
+};
+
+/**
+ * Atualiza os valores dos cards de resumo financeiro.
+ */
+const updateDashboardCards = () => {
+    const transactions = appState.transactions;
+    const now = chartCurrentDate; // Usa a data do seletor do gráfico
+
+    // Filtra transações do mês atual do gráfico
+    const monthlyTransactions = transactions.filter(t => {
+        const tDate = new Date(t.date);
+        return tDate.getFullYear() === now.getFullYear() && tDate.getMonth() === now.getMonth();
     });
 
-    // Fecha dropdowns de ação ao clicar fora
-    document.addEventListener('click', (e) => {
-        if (!e.target.closest('.action-menu-button')) {
-            document.querySelectorAll('.action-menu-dropdown').forEach(dropdown => {
-                dropdown.classList.add('hidden');
-            });
-        }
+    // Calcula as despesas pagas no mês
+    const paidExpenses = monthlyTransactions
+        .filter(t => t.type === 'expense' && t.status === 'Pago')
+        .reduce((sum, t) => sum + t.amount, 0);
+
+    // Calcula as receitas do mês
+    const monthlyIncome = monthlyTransactions
+        .filter(t => t.type === 'income' && t.status === 'Recebido')
+        .reduce((sum, t) => sum + t.amount, 0);
+
+    // Saldo atual (considera todas as transações, não apenas do mês)
+    const totalIncome = transactions.filter(t => t.type === 'income' && t.status === 'Recebido').reduce((sum, t) => sum + t.amount, 0);
+    const totalPaidExpenses = transactions.filter(t => t.type === 'expense' && t.status === 'Pago').reduce((sum, t) => sum + t.amount, 0);
+    const currentBalance = totalIncome - totalPaidExpenses;
+
+    // Despesas pendentes (todas, não apenas do mês)
+    const pendingExpenses = transactions
+        .filter(t => t.type === 'expense' && t.status === 'Pendente')
+        .reduce((sum, t) => sum + t.amount, 0);
+    
+    // Total guardado nas caixinhas
+    const totalSavedInCaixinhas = appState.categories
+        .filter(c => c.type === 'caixinha')
+        .reduce((sum, c) => sum + (c.currentAmount || 0), 0);
+
+    // Atualiza os elementos no DOM
+    document.getElementById('dashboard-paid-expenses').textContent = formatCurrency(paidExpenses);
+    document.getElementById('dashboard-current-balance').textContent = formatCurrency(currentBalance);
+    document.getElementById('dashboard-pending-expenses').textContent = formatCurrency(pendingExpenses);
+    document.getElementById('dashboard-total-caixinhas-saved').textContent = formatCurrency(totalSavedInCaixinhas);
+};
+
+/**
+ * Renderiza ou atualiza o gráfico de despesas com base no tipo selecionado.
+ * @param {string} [type='pie'] - O tipo de gráfico ('pie', 'bar', 'line').
+ */
+const renderExpenseChart = (type = 'pie') => {
+    const ctx = document.getElementById('expense-chart').getContext('2d');
+    const now = chartCurrentDate;
+
+    // Destroi o gráfico anterior, se existir
+    if (expenseChart) {
+        expenseChart.destroy();
+    }
+
+    // Prepara os dados do gráfico
+    const monthlyTransactions = appState.transactions.filter(t => {
+        const tDate = new Date(t.date);
+        return tDate.getFullYear() === now.getFullYear() && tDate.getMonth() === now.getMonth();
     });
 
+    let chartData = {};
+    let chartOptions = {};
 
-    // --- Funções de Gráfico (REESTRUTURADO) ---
-    function updateChartMonthDisplay() {
-        const displayValue = currentChartType === 'line' ? 'evolution' : chartMonth;
-        currentMonthChartDisplay.textContent = formatMonthDisplay(displayValue);
-    }
-    
-    function renderChart() {
-        switch (currentChartType) {
-            case 'pie':
-                renderExpensePieChart();
-                break;
-            case 'bar':
-                renderIncomeVsExpenseBarChart();
-                break;
-            case 'line':
-                renderBalanceEvolutionLineChart();
-                break;
-            default:
-                renderExpensePieChart();
-        }
-        updateChartMonthDisplay();
-    }
-    
-    function renderExpensePieChart() {
-        const ctx = document.getElementById('expense-chart').getContext('2d');
-        const expensesByCategory = transactions
-            .filter(t => t.type === 'expense' && t.date.startsWith(getCurrentMonthYYYYMM(chartMonth)) && (t.status === 'Pago' || t.status === 'Recebido' || t.status === 'Confirmado'))
+    if (type === 'pie') {
+        // Gráfico de Pizza: Despesas por Categoria
+        const expensesByCategory = monthlyTransactions
+            .filter(t => t.type === 'expense')
             .reduce((acc, t) => {
-                const category = categories.find(c => c.id === t.categoryId);
-                const categoryName = category ? category.name : 'Sem Categoria';
-                const categoryColor = category ? category.color : '#808080';
-                if (!acc[categoryName]) {
-                    acc[categoryName] = { total: 0, color: categoryColor };
-                }
-                acc[categoryName].total += parseFloat(t.amount);
+                const category = appState.categories.find(c => c.id === t.categoryId)?.name || 'Sem Categoria';
+                acc[category] = (acc[category] || 0) + t.amount;
                 return acc;
             }, {});
 
-        const labels = Object.keys(expensesByCategory);
-        const data = labels.map(label => expensesByCategory[label].total);
-        const backgroundColors = labels.map(label => expensesByCategory[label].color);
-
-        if (expenseChartInstance) {
-            expenseChartInstance.destroy();
-        }
-
-        if (labels.length === 0) {
-            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-            ctx.font = '16px "Inter", sans-serif';
-            ctx.fillStyle = '#6B7280';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            ctx.fillText('Sem despesas pagas para exibir neste mês.', ctx.canvas.width / 2, ctx.canvas.height / 2);
-            return;
-        }
-
-        expenseChartInstance = new Chart(ctx, {
-            type: 'pie',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Despesas por Categoria',
-                    data: data,
-                    backgroundColor: backgroundColors,
-                    borderColor: '#fff',
-                    borderWidth: 2
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { position: 'bottom' },
-                    tooltip: {
-                        callbacks: {
-                            label: (context) => `${context.label || ''}: ${formatCurrency(context.parsed)}`
-                        }
-                    }
-                }
-            }
-        });
-    }
-
-    function renderIncomeVsExpenseBarChart() {
-        const ctx = document.getElementById('expense-chart').getContext('2d');
-        const monthFilter = getCurrentMonthYYYYMM(chartMonth);
-
-        const totalIncome = transactions
-            .filter(t => t.type === 'income' && t.date.startsWith(monthFilter) && (t.status === 'Recebido' || t.status === 'Confirmado'))
-            .reduce((sum, t) => sum + parseFloat(t.amount), 0);
-
-        const totalExpense = transactions
-            .filter(t => t.type === 'expense' && t.date.startsWith(monthFilter) && (t.status === 'Pago' || t.status === 'Confirmado'))
-            .reduce((sum, t) => sum + parseFloat(t.amount), 0);
-
-        if (expenseChartInstance) {
-            expenseChartInstance.destroy();
-        }
-        
-        expenseChartInstance = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: ['Receitas', 'Despesas'],
-                datasets: [{
-                    label: 'Total no Mês',
-                    data: [totalIncome, totalExpense],
-                    backgroundColor: [
-                        'rgba(75, 192, 192, 0.6)',
-                        'rgba(255, 99, 132, 0.6)'
-                    ],
-                    borderColor: [
-                        'rgba(75, 192, 192, 1)',
-                        'rgba(255, 99, 132, 1)'
-                    ],
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: (context) => `${context.label || ''}: ${formatCurrency(context.raw)}`
-                        }
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            callback: (value) => formatCurrency(value)
-                        }
-                    }
-                }
-            }
-        });
-    }
-    
-    function renderBalanceEvolutionLineChart() {
-        const ctx = document.getElementById('expense-chart').getContext('2d');
-        const balances = [];
-        const labels = [];
-        let cumulativeBalance = 0;
-    
-        // 1. Calcular o saldo inicial antes dos últimos 6 meses
-        const sixMonthsAgo = new Date();
-        sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-        const sixMonthsAgoYYYYMM = getCurrentMonthYYYYMM(sixMonthsAgo);
-    
-        let initialBalance = 0;
-        transactions.forEach(t => {
-            const transactionMonth = t.date.substring(0, 7);
-            if (transactionMonth < sixMonthsAgoYYYYMM && (t.status === 'Pago' || t.status === 'Recebido' || t.status === 'Confirmado')) {
-                if (t.type === 'income') initialBalance += parseFloat(t.amount);
-                if (t.type === 'expense') initialBalance -= parseFloat(t.amount);
-                if (t.type === 'caixinha') {
-                    if (t.transactionType === 'deposit') initialBalance -= parseFloat(t.amount);
-                    if (t.transactionType === 'withdraw') initialBalance += parseFloat(t.amount);
-                }
-            }
-        });
-    
-        cumulativeBalance = initialBalance;
-    
-        // 2. Calcular o saldo final para cada um dos últimos 6 meses
-        for (let i = 5; i >= 0; i--) {
-            const date = new Date();
-            date.setMonth(date.getMonth() - i);
-            const monthYYYYMM = getCurrentMonthYYYYMM(date);
-            
-            const monthIncome = transactions
-                .filter(t => t.date.startsWith(monthYYYYMM) && t.type === 'income' && (t.status === 'Recebido' || t.status === 'Confirmado'))
-                .reduce((sum, t) => sum + parseFloat(t.amount), 0);
-            
-            const monthExpense = transactions
-                .filter(t => t.date.startsWith(monthYYYYMM) && t.type === 'expense' && (t.status === 'Pago' || t.status === 'Confirmado'))
-                .reduce((sum, t) => sum + parseFloat(t.amount), 0);
-
-            const monthCaixinhaNet = transactions
-                .filter(t => t.date.startsWith(monthYYYYMM) && t.type === 'caixinha' && t.status === 'Confirmado')
-                .reduce((sum, t) => {
-                    if (t.transactionType === 'deposit') return sum - parseFloat(t.amount);
-                    if (t.transactionType === 'withdraw') return sum + parseFloat(t.amount);
-                    return sum;
-                }, 0);
-    
-            cumulativeBalance += monthIncome - monthExpense + monthCaixinhaNet;
-            balances.push(cumulativeBalance);
-            labels.push(date.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }));
-        }
-
-        if (expenseChartInstance) {
-            expenseChartInstance.destroy();
-        }
-
-        expenseChartInstance = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Saldo Acumulado',
-                    data: balances,
-                    fill: false,
-                    borderColor: 'rgb(75, 192, 192)',
-                    tension: 0.1
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { display: false },
-                    tooltip: {
-                        callbacks: {
-                            label: (context) => `Saldo: ${formatCurrency(context.raw)}`
-                        }
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: false,
-                        ticks: {
-                            callback: (value) => formatCurrency(value)
-                        }
-                    }
-                }
-            }
-        });
-    }
-
-    // --- Listeners do Gráfico Interativo ---
-    chartTypeSelector.addEventListener('click', (e) => {
-        const button = e.target.closest('.chart-type-button');
-        if (!button) return;
-
-        currentChartType = button.dataset.chartType;
-
-        // Atualiza a classe 'active' nos botões
-        document.querySelectorAll('.chart-type-button').forEach(btn => btn.classList.remove('active'));
-        button.classList.add('active');
-        
-        // Habilita/desabilita a navegação de mês
-        const monthNavDisabled = currentChartType === 'line';
-        prevMonthChartButton.disabled = monthNavDisabled;
-        nextMonthChartButton.disabled = monthNavDisabled;
-        if(monthNavDisabled) {
-             prevMonthChartButton.classList.add('opacity-50', 'cursor-not-allowed');
-             nextMonthChartButton.classList.add('opacity-50', 'cursor-not-allowed');
-        } else {
-             prevMonthChartButton.classList.remove('opacity-50', 'cursor-not-allowed');
-             nextMonthChartButton.classList.remove('opacity-50', 'cursor-not-allowed');
-        }
-
-        renderChart();
-    });
-    
-    prevMonthChartButton.addEventListener('click', () => {
-        chartMonth.setMonth(chartMonth.getMonth() - 1);
-        renderChart();
-    });
-
-    nextMonthChartButton.addEventListener('click', () => {
-        chartMonth.setMonth(chartMonth.getMonth() + 1);
-        renderChart();
-    });
-
-
-    // --- Funções de Notificação (Toast) ---
-    function showToast(message, type = 'info') {
-        const container = document.getElementById('toast-container');
-        if (!container) return; // Se o container não existe, não faz nada
-        const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-
-        const icons = {
-            success: 'fa-solid fa-circle-check',
-            error: 'fa-solid fa-circle-xmark',
-            info: 'fa-solid fa-circle-info'
+        chartData = {
+            labels: Object.keys(expensesByCategory),
+            datasets: [{
+                label: 'Despesas por Categoria',
+                data: Object.values(expensesByCategory),
+                backgroundColor: [
+                    '#EF4444', '#3B82F6', '#22C55E', '#F97316',
+                    '#8B5CF6', '#F59E0B', '#10B981', '#6366F1'
+                ],
+                hoverOffset: 4
+            }]
         };
-
-        toast.innerHTML = `
-            <i class="${icons[type]}"></i>
-            <span>${message}</span>
-        `;
-        
-        container.appendChild(toast);
-
-        // Trigger the animation
-        setTimeout(() => {
-            toast.classList.add('show');
-        }, 100);
-
-        // Remove the toast after 3 seconds
-        setTimeout(() => {
-            toast.classList.remove('show');
-            // Remove the element from DOM after the fade out animation
-            toast.addEventListener('transitionend', () => {
-                toast.remove();
-            });
-        }, 3000);
-    }
-
-    // --- NOVO: Função de Sugestão de Categoria com IA ---
-    async function suggestCategoryFromAI() {
-        const description = transactionDescriptionInput.value.trim();
-        const button = suggestCategoryButton;
-
-        if (!description) {
-            showToast("Por favor, digite uma descrição para a IA sugerir uma categoria.", "info");
-            return;
-        }
-
-        const validKeys = geminiApiKeys.filter((key) => key && key.trim() !== "");
-        if (!isGeminiApiReady || validKeys.length === 0) {
-            showToast("O assistente de IA não está configurado. Verifique suas chaves de API.", "error");
-            return;
-        }
-
-        button.disabled = true;
-        button.innerHTML = '<div class="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-900"></div>';
-
-        const transactionType = document.querySelector('input[name="transaction-type"]:checked').value;
-        
-        // Passa as categorias existentes com seus tipos e prioridades
-        const existingCategories = categories
-            .filter(c => c.type === transactionType)
-            .map(c => ({ name: c.name, priority: c.priority }));
-
-        const prompt = `
-            Você é um assistente financeiro especialista em categorização.
-            Analise a descrição da transação: "${description}".
-            As categorias de ${transactionType === 'income' ? 'receita' : 'despesa'} existentes são: ${JSON.stringify(existingCategories)}.
-            
-            Sua tarefa é retornar um objeto JSON com a seguinte estrutura:
-            {
-              "suggestedCategoryName": "nome da categoria",
-              "isNew": boolean,
-              "type": "${transactionType}",
-              "priority": "essential" ou "non-essential" (apenas se for uma nova despesa)
+        chartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'top' },
+                title: { display: true, text: 'Distribuição de Despesas' }
             }
-
-            REGRAS CRÍTICAS:
-            1. FAÇA UMA ANÁLISE SEMÂNTICA PROFUNDA. Compare o significado da descrição com o das categorias existentes.
-            2. ANÁLISE DE PRIORIDADE: Analise a descrição por palavras como "essencial", "necessário", "básico" vs. "não essencial", "supérfluo", "lazer", "desejo".
-            3. Se a descrição se encaixa LOGICAMENTE em uma categoria existente E a prioridade (se inferida ou explícita na descrição) NÃO CONFLITA com a prioridade da categoria existente, PREFIRA USAR a categoria existente. Defina "isNew" como false.
-            4. Se a descrição tem o mesmo tema de uma categoria existente (ex: "Mercado"), mas a prioridade inferida da descrição (ex: "não essencial" para "salgadinhos") é DIFERENTE da prioridade da categoria existente (ex: "Mercado Essencial" que é "essential"), você DEVE sugerir uma NOVA categoria com um nome que reflita essa diferença (ex: "Mercado (Lazer)"). Defina "isNew" como true.
-            5. Só sugira uma nova categoria (isNew: true) se a descrição for CLARAMENTE distinta de TODAS as categorias existentes OU se houver o conflito de prioridade descrito na regra 4.
-            6. Se for uma nova despesa, determine se é "essential" (moradia, alimentação básica, saúde, transporte essencial) ou "non-essential" (lazer, hobbies, compras não essenciais, etc.).
-            7. Responda APENAS com o objeto JSON. Não inclua \`\`\`json ou qualquer outro texto.
-        `;
-
-        const payload = {
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-                response_mime_type: "application/json",
-            },
         };
+    } else if (type === 'bar') {
+        // Gráfico de Barras: Receita vs. Despesa
+        const totalIncome = monthlyTransactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+        const totalExpense = monthlyTransactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
 
-        try {
-            const result = await tryNextApiKey(payload, currentGeminiApiKeyIndex);
-            
-            if (!result.candidates || !result.candidates[0].content.parts[0].text) {
-                throw new Error("Resposta da IA inválida.");
-            }
-            
-            const suggestion = JSON.parse(result.candidates[0].content.parts[0].text);
-            
-            if (suggestion.isNew) {
-                showConfirmationModal(
-                    "Nova Categoria Sugerida",
-                    `A IA sugere a nova categoria "${suggestion.suggestedCategoryName}". Deseja criá-la como uma ${suggestion.type === 'income' ? 'receita' : 'despesa ' + (suggestion.priority || '')}?`,
-                    async () => {
-                        const newCategory = {
-                            id: generateUUID(),
-                            name: suggestion.suggestedCategoryName,
-                            type: suggestion.type,
-                            priority: suggestion.priority || null,
-                            color: getNextAvailableColor(suggestion.type, suggestion.priority)
-                        };
-                        categories.push(newCategory);
-                        await saveCategories();
-                        showToast(`Categoria "${newCategory.name}" criada com sucesso!`, "success");
-                        
-                        populateTransactionCategories(newCategory.type);
-                        transactionCategorySelect.value = newCategory.id;
-                    }
-                );
-            } else {
-                const existingCategory = categories.find(c => c.name.toLowerCase() === suggestion.suggestedCategoryName.toLowerCase() && c.type === suggestion.type);
-                if (existingCategory) {
-                    showToast(`Categoria sugerida: ${existingCategory.name}`, "success");
-                    transactionCategorySelect.value = existingCategory.id;
-                } else {
-                    showToast(`A categoria sugerida "${suggestion.suggestedCategoryName}" não foi encontrada.`, "error");
+        chartData = {
+            labels: ['Movimentações do Mês'],
+            datasets: [
+                {
+                    label: 'Receitas',
+                    data: [totalIncome],
+                    backgroundColor: '#22C55E',
+                },
+                {
+                    label: 'Despesas',
+                    data: [totalExpense],
+                    backgroundColor: '#EF4444',
                 }
-            }
-
-        } catch (error) {
-            console.error("Erro ao sugerir categoria:", error);
-            showToast("Não foi possível sugerir uma categoria.", "error");
-        } finally {
-            button.disabled = false;
-            button.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i>';
-        }
-    }
-    
-    suggestCategoryButton.addEventListener('click', suggestCategoryFromAI);
-
-    // Listener para o novo botão de adicionar categoria rápido
-    addCategoryQuickButton.addEventListener('click', () => {
-        // Abre o modal de categoria, mas não passa nenhum objeto, então ele abre em modo de adição
-        openCategoryModal();
-        // Pré-seleciona o tipo de categoria com base no tipo de transação que o usuário está criando
-        const selectedTransactionType = document.querySelector('input[name="transaction-type"]:checked').value;
-        let categoryTypeToSelect = selectedTransactionType;
-        if (selectedTransactionType === 'deposit' || selectedTransactionType === 'withdraw') {
-            categoryTypeToSelect = 'caixinha';
-        }
-        const categoryRadio = document.querySelector(`input[name="category-type"][value="${categoryTypeToSelect}"]`);
-        if (categoryRadio) {
-            categoryRadio.checked = true;
-            // Dispara o evento 'change' para garantir que a UI do modal de categoria se atualize
-            categoryRadio.dispatchEvent(new Event('change'));
-        }
-    });
-    
-    // --- Funções de Otimização de Categoria com IA ---
-    function closeCategoryOptimizationModal() {
-        categoryOptimizationModal.classList.remove('active');
-    }
-
-    async function openCategoryOptimizationModal() {
-        categoryOptimizationModal.classList.add('active');
-        categoryOptimizationSuggestions.innerHTML = '';
-        categoryOptimizationLoadingIndicator.classList.remove('hidden');
-
-        const validKeys = geminiApiKeys.filter((key) => key && key.trim() !== "");
-        if (!isGeminiApiReady || validKeys.length === 0) {
-            categoryOptimizationSuggestions.innerHTML = '<p class="text-red-500">O assistente de IA não está configurado.</p>';
-            categoryOptimizationLoadingIndicator.classList.add('hidden');
-            return;
-        }
-
-        const categoryAndTransactionData = categories.map(cat => {
-            const associatedTransactions = transactions
-                .filter(t => t.categoryId === cat.id)
-                .map(t => t.description)
-                .slice(0, 5); // Limita a 5 descrições por performance
-            return {
-                id: cat.id,
-                name: cat.name,
-                type: cat.type,
-                transactionCount: associatedTransactions.length,
-                sampleDescriptions: associatedTransactions
-            };
-        });
-
-        const prompt = `
-            Você é um organizador financeiro especialista. Analise a lista de categorias e transações de um usuário.
-            Seu objetivo é sugerir melhorias para manter as categorias organizadas e claras.
-            Responda com um array de objetos JSON, onde cada objeto é uma sugestão.
-            
-            As sugestões podem ser dos seguintes tipos: 'merge', 'rename', 'delete'.
-
-            Estrutura da resposta:
-            [
-              {
-                "type": "merge",
-                "from": ["Nome Categoria A", "Nome Categoria B"],
-                "to": "Nome Sugerido para a Nova Categoria",
-                "reason": "Justificativa curta para a sugestão."
-              },
-              {
-                "type": "rename",
-                "from": "Nome Categoria Antiga",
-                "to": "Novo Nome Sugerido",
-                "reason": "Justificativa curta para a sugestão."
-              },
-              {
-                "type": "delete",
-                "from": "Nome Categoria",
-                "reason": "Justificativa curta (ex: Sem uso e sem transações)."
-              }
             ]
-
-            REGRAS:
-            1.  Mescle categorias que são muito similares (ex: "Táxi" e "Uber").
-            2.  Renomeie categorias com nomes pouco claros ou com abreviações (ex: "Transp." para "Transporte").
-            3.  Sugira apagar apenas categorias sem transações associadas.
-            4.  Se não houver sugestões, retorne um array vazio [].
-            5.  Foque em sugestões de alto impacto. Não sugira muitas mudanças de uma vez. Limite-se a um máximo de 5 sugestões.
-            6.  Responda APENAS com o array JSON. Não inclua \`\`\`json ou qualquer outro texto.
-
-            DADOS DO USUÁRIO:
-            ${JSON.stringify(categoryAndTransactionData, null, 2)}
-        `;
-
-        const payload = {
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-                response_mime_type: "application/json",
-            },
         };
-
-        try {
-            const result = await tryNextApiKey(payload, currentGeminiApiKeyIndex);
-            if (!result.candidates || !result.candidates[0].content.parts[0].text) {
-                throw new Error("Resposta da IA inválida ao otimizar categorias.");
+        chartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: { y: { beginAtZero: true } },
+            plugins: {
+                title: { display: true, text: 'Receita vs. Despesa' }
             }
-            const suggestions = JSON.parse(result.candidates[0].content.parts[0].text);
-            renderCategoryOptimizationSuggestions(suggestions);
-        } catch (error) {
-            console.error("Erro ao otimizar categorias:", error);
-            categoryOptimizationSuggestions.innerHTML = `<p class="text-red-500">Erro ao obter sugestões da IA. Tente novamente.</p>`;
-        } finally {
-            categoryOptimizationLoadingIndicator.classList.add('hidden');
+        };
+    } else if (type === 'line') {
+        // Gráfico de Linha: Evolução do Saldo
+        const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+        const dailyBalances = Array(daysInMonth).fill(0);
+        
+        monthlyTransactions.forEach(t => {
+            const day = new Date(t.date).getDate() - 1;
+            if (t.type === 'income') dailyBalances[day] += t.amount;
+            if (t.type === 'expense') dailyBalances[day] -= t.amount;
+        });
+
+        // Acumula os saldos
+        for (let i = 1; i < dailyBalances.length; i++) {
+            dailyBalances[i] += dailyBalances[i - 1];
         }
+
+        chartData = {
+            labels: Array.from({ length: daysInMonth }, (_, i) => i + 1),
+            datasets: [{
+                label: 'Evolução do Saldo no Mês',
+                data: dailyBalances,
+                fill: false,
+                borderColor: '#3B82F6',
+                tension: 0.1
+            }]
+        };
+        chartOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: { y: { beginAtZero: true } },
+            plugins: {
+                title: { display: true, text: 'Evolução do Saldo' }
+            }
+        };
     }
+
+    // Cria a nova instância do gráfico
+    expenseChart = new Chart(ctx, {
+        type: type,
+        data: chartData,
+        options: chartOptions
+    });
+};
+
+/**
+ * Atualiza o texto que exibe o mês e ano corrente no seletor de mês do gráfico.
+ */
+const updateChartMonthDisplay = () => {
+    const display = document.getElementById('current-month-chart-display');
+    display.textContent = chartCurrentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+};
+
+/**
+ * Adiciona listeners para os controles do gráfico (mês anterior/próximo e tipo de gráfico).
+ */
+const setupChartControls = () => {
+    document.getElementById('prev-month-chart-button').addEventListener('click', () => {
+        chartCurrentDate.setMonth(chartCurrentDate.getMonth() - 1);
+        const currentType = document.querySelector('.chart-type-button.active').dataset.chartType;
+        renderExpenseChart(currentType);
+        updateChartMonthDisplay();
+    });
+
+    document.getElementById('next-month-chart-button').addEventListener('click', () => {
+        chartCurrentDate.setMonth(chartCurrentDate.getMonth() + 1);
+        const currentType = document.querySelector('.chart-type-button.active').dataset.chartType;
+        renderExpenseChart(currentType);
+        updateChartMonthDisplay();
+    });
+
+    document.querySelectorAll('.chart-type-button').forEach(button => {
+        button.addEventListener('click', () => {
+            document.querySelectorAll('.chart-type-button').forEach(btn => btn.classList.remove('active'));
+            button.classList.add('active');
+            renderExpenseChart(button.dataset.chartType);
+        });
+    });
+};
+
+// ================================================================================================
+// LÓGICA DA PÁGINA DE TRANSAÇÕES
+// ================================================================================================
+
+let transactionCurrentDate = new Date(); // Data para controle do mês da lista de transações
+
+/**
+ * Atualiza a exibição da lista de transações e os controles associados.
+ */
+const updateTransactionsView = () => {
+    renderTransactionsList();
+    updateTransactionsMonthDisplay();
+    populateCategoryFilter();
+};
+
+/**
+ * Renderiza a lista de transações, agrupando-as por data.
+ */
+const renderTransactionsList = () => {
+    const container = document.getElementById('transactions-list-container');
+    container.innerHTML = '<div class="absolute left-3 top-0 bottom-0 w-0.5 bg-gray-200"></div>'; // Recria a linha do tempo
+
+    const filters = getTransactionFilters();
     
-    function renderCategoryOptimizationSuggestions(suggestions) {
-        categoryOptimizationSuggestions.innerHTML = '';
-        if (suggestions.length === 0) {
-            categoryOptimizationSuggestions.innerHTML = '<p class="text-center text-gray-500 py-4">Nenhuma sugestão de otimização encontrada. Suas categorias estão bem organizadas!</p>';
+    // Filtra transações pelo mês e ano selecionados
+    const monthlyTransactions = appState.transactions.filter(t => {
+        const tDate = new Date(t.date);
+        return tDate.getFullYear() === transactionCurrentDate.getFullYear() &&
+               tDate.getMonth() === transactionCurrentDate.getMonth();
+    });
+
+    // Aplica os filtros de tipo, categoria e status
+    const filteredTransactions = monthlyTransactions.filter(t => {
+        const typeMatch = filters.type === 'all' || t.type === filters.type;
+        const categoryMatch = filters.category === 'all' || t.categoryId === filters.category;
+        const statusMatch = filters.status === 'all' || t.status === filters.status;
+        return typeMatch && categoryMatch && statusMatch;
+    });
+
+    if (filteredTransactions.length === 0) {
+        container.innerHTML += '<p class="text-center text-gray-500 py-4" id="no-transactions-message">Nenhuma transação encontrada para este mês ou filtro.</p>';
+        return;
+    }
+
+    // Agrupa as transações por data
+    const groupedByDate = filteredTransactions.reduce((acc, t) => {
+        const date = new Date(t.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', weekday: 'long' });
+        if (!acc[date]) {
+            acc[date] = [];
+        }
+        acc[date].push(t);
+        return acc;
+    }, {});
+    
+    // Ordena as datas em ordem decrescente
+    const sortedDates = Object.keys(groupedByDate).sort((a, b) => {
+        const dateA = new Date(appState.transactions.find(t => new Date(t.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', weekday: 'long' }) === a).date);
+        const dateB = new Date(appState.transactions.find(t => new Date(t.date).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', weekday: 'long' }) === b).date);
+        return dateB - dateA;
+    });
+
+    // Renderiza cada grupo de data
+    for (const date of sortedDates) {
+        const dateGroupContainer = document.createElement('div');
+        dateGroupContainer.className = 'mb-6';
+        
+        const dateHeader = `
+            <div class="flex items-center mb-2 relative pl-12">
+                <div class="timeline-bullet-date">
+                    <i class="fa-solid fa-calendar-day text-white text-sm"></i>
+                </div>
+                <h3 class="font-semibold text-gray-800">${date}</h3>
+            </div>`;
+        
+        const transactionsHtml = groupedByDate[date].map(t => createTransactionCard(t)).join('');
+
+        dateGroupContainer.innerHTML = dateHeader + transactionsHtml;
+        container.appendChild(dateGroupContainer);
+    }
+};
+
+/**
+ * Cria o HTML para um único card de transação.
+ * @param {object} transaction - O objeto da transação.
+ * @returns {string} - O HTML do card.
+ */
+const createTransactionCard = (transaction) => {
+    const category = appState.categories.find(c => c.id === transaction.categoryId);
+    const isIncome = transaction.type === 'income';
+    const isExpense = transaction.type === 'expense';
+    const isCaixinha = transaction.type === 'deposit' || transaction.type === 'withdraw';
+
+    let icon, color, amountSign;
+    if (isIncome) {
+        icon = 'fa-arrow-up';
+        color = 'text-green-500';
+        amountSign = '+';
+    } else if (isExpense) {
+        icon = 'fa-arrow-down';
+        color = 'text-red-500';
+        amountSign = '-';
+    } else { // Caixinha
+        icon = transaction.type === 'deposit' ? 'fa-piggy-bank' : 'fa-wallet';
+        color = 'text-blue-500';
+        amountSign = transaction.type === 'deposit' ? '-' : '+';
+    }
+
+    const statusBadge = `
+        <span class="text-xs font-medium px-2 py-1 rounded-full ${
+            transaction.status === 'Pago' || transaction.status === 'Recebido' ? 'bg-green-100 text-green-800' :
+            transaction.status === 'Pendente' ? 'bg-yellow-100 text-yellow-800' :
+            'bg-blue-100 text-blue-800'
+        }">${transaction.status}</span>
+    `;
+
+    return `
+        <div class="ml-12 mb-2 bg-white p-4 rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow duration-200">
+            <div class="flex justify-between items-start">
+                <div class="flex items-center gap-4">
+                    <div class="w-10 h-10 rounded-full flex items-center justify-center bg-gray-100 ${color}">
+                        <i class="fa-solid ${icon}"></i>
+                    </div>
+                    <div>
+                        <p class="font-semibold text-gray-800">${transaction.description}</p>
+                        <p class="text-sm text-gray-500">${category?.name || 'Sem categoria'}</p>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <p class="font-bold text-lg ${color}">${amountSign} ${formatCurrency(transaction.amount)}</p>
+                    ${statusBadge}
+                </div>
+            </div>
+        </div>
+    `;
+};
+
+
+/**
+ * Retorna os valores atuais dos filtros de transação.
+ * @returns {object} - Um objeto com os valores dos filtros.
+ */
+const getTransactionFilters = () => {
+    const type = document.getElementById('filter-type').value;
+    const category = document.getElementById('filter-category').value;
+    const status = document.getElementById('filter-status').value;
+    return { type, category, status };
+};
+
+/**
+ * Atualiza o texto que exibe o mês e ano corrente na lista de transações.
+ */
+const updateTransactionsMonthDisplay = () => {
+    const display = document.getElementById('current-month-display');
+    display.textContent = transactionCurrentDate.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+};
+
+/**
+ * Popula o seletor de filtro de categorias com as categorias do usuário.
+ */
+const populateCategoryFilter = () => {
+    const select = document.getElementById('filter-category');
+    select.innerHTML = '<option value="all">Todas as Categorias</option>';
+    appState.categories.forEach(category => {
+        const option = document.createElement('option');
+        option.value = category.id;
+        option.textContent = category.name;
+        select.appendChild(option);
+    });
+};
+
+/**
+ * Adiciona listeners para os controles da página de transações.
+ */
+const setupTransactionControls = () => {
+    // Botões de navegação de mês
+    document.getElementById('prev-month-button').addEventListener('click', () => {
+        transactionCurrentDate.setMonth(transactionCurrentDate.getMonth() - 1);
+        updateTransactionsView();
+    });
+
+    document.getElementById('next-month-button').addEventListener('click', () => {
+        transactionCurrentDate.setMonth(transactionCurrentDate.getMonth() + 1);
+        updateTransactionsView();
+    });
+
+    // Filtros
+    document.getElementById('filter-type').addEventListener('change', renderTransactionsList);
+    document.getElementById('filter-category').addEventListener('change', renderTransactionsList);
+    document.getElementById('filter-status').addEventListener('change', renderTransactionsList);
+
+    // Botão de limpar filtros
+    document.getElementById('reset-filters-button').addEventListener('click', () => {
+        document.getElementById('filter-type').value = 'all';
+        document.getElementById('filter-category').value = 'all';
+        document.getElementById('filter-status').value = 'all';
+        renderTransactionsList();
+    });
+};
+
+// ================================================================================================
+// MODAL DE TRANSAÇÃO (LÓGICA MULTI-ETAPAS)
+// ================================================================================================
+
+const transactionModal = {
+    element: document.getElementById('transaction-modal'),
+    form: document.getElementById('transaction-form'),
+    steps: {
+        1: document.getElementById('transaction-step-1'),
+        2: document.getElementById('transaction-step-2'),
+        3: document.getElementById('transaction-step-3'),
+    },
+    currentStep: 1,
+    isEditing: false,
+    editingId: null,
+
+    open: (transactionId = null) => {
+        transactionModal.isEditing = !!transactionId;
+        transactionModal.editingId = transactionId;
+        transactionModal.form.reset();
+        
+        if (transactionModal.isEditing) {
+            // Lógica para preencher o formulário no modo de edição (simplificado)
+            const transaction = appState.transactions.find(t => t.id === transactionId);
+            // ... preencher campos
+            // Como o fluxo é multi-etapas, a edição direta é complexa.
+            // Por simplicidade, a edição não será implementada neste exemplo.
+            showToast("A edição de transações ainda não foi implementada.", "info");
             return;
         }
 
-        suggestions.forEach((suggestion, index) => {
-            const card = document.createElement('div');
-            card.className = 'suggestion-card';
-            let description = '';
+        transactionModal.goToStep(1);
+        transactionModal.element.classList.add('active');
+    },
 
-            switch(suggestion.type) {
-                case 'merge':
-                    description = `Sugerimos mesclar as categorias <strong>${suggestion.from.join(', ')}</strong> na nova categoria <strong>"${suggestion.to}"</strong>.`;
-                    break;
-                case 'rename':
-                    description = `Sugerimos renomear a categoria <strong>"${suggestion.from}"</strong> para <strong>"${suggestion.to}"</strong>.`;
-                    break;
-                case 'delete':
-                     description = `Sugerimos apagar a categoria <strong>"${suggestion.from}"</strong>.`;
-                    break;
+    close: () => {
+        transactionModal.element.classList.remove('active');
+    },
+
+    goToStep: (stepNumber) => {
+        transactionModal.currentStep = stepNumber;
+        Object.values(transactionModal.steps).forEach(step => step.classList.add('hidden'));
+        transactionModal.steps[stepNumber].classList.remove('hidden');
+        
+        if (stepNumber === 2) {
+            const type = transactionModal.form['transaction-type'].value;
+            document.getElementById('step-2-title').textContent = {
+                'income': 'Nova Receita',
+                'expense': 'Nova Despesa',
+                'deposit': 'Guardar Dinheiro',
+                'withdraw': 'Resgatar Dinheiro'
+            }[type];
+            transactionModal.populateCategoriesForStep2(type);
+        } else if (stepNumber === 3) {
+            const type = transactionModal.form['transaction-type'].value;
+            transactionModal.setupStep3(type);
+        }
+    },
+    
+    populateCategoriesForStep2: (type) => {
+        const select = document.getElementById('transaction-category');
+        select.innerHTML = ''; // Limpa opções anteriores
+        
+        let relevantCategories = [];
+        if (type === 'income' || type === 'expense') {
+            relevantCategories = appState.categories.filter(c => c.type === type);
+        } else { // deposit ou withdraw
+            relevantCategories = appState.categories.filter(c => c.type === 'caixinha');
+        }
+
+        relevantCategories.forEach(c => {
+            const option = document.createElement('option');
+            option.value = c.id;
+            option.textContent = c.name;
+            select.appendChild(option);
+        });
+    },
+    
+    setupStep3: (type) => {
+        const statusContainer = document.getElementById('transaction-status-options');
+        statusContainer.innerHTML = ''; // Limpa opções
+        const installmentsField = document.getElementById('installments-field');
+        
+        let statuses = [];
+        if (type === 'income') {
+            statuses = ['Recebido', 'Pendente'];
+            installmentsField.classList.remove('hidden');
+        } else if (type === 'expense') {
+            statuses = ['Pago', 'Pendente'];
+            installmentsField.classList.remove('hidden');
+        } else { // deposit ou withdraw
+            statuses = ['Confirmado'];
+            installmentsField.classList.add('hidden'); // Esconde parcelas para caixinhas
+        }
+        
+        statuses.forEach((status, index) => {
+            const radioId = `status-${status.toLowerCase()}`;
+            const label = document.createElement('label');
+            label.className = 'inline-flex items-center';
+            label.innerHTML = `
+                <input type="radio" name="transaction-status" value="${status}" id="${radioId}" class="form-radio" ${index === 0 ? 'checked' : ''}>
+                <span class="ml-2">${status}</span>
+            `;
+            statusContainer.appendChild(label);
+        });
+
+        // Preenche a data com o dia de hoje por padrão
+        document.getElementById('transaction-date').value = formatDateForInput(new Date());
+    },
+
+    handleSubmit: (e) => {
+        e.preventDefault();
+        const formData = new FormData(transactionModal.form);
+        const type = transactionModal.form['transaction-type'].value;
+
+        const newTransaction = {
+            id: `trans_${new Date().getTime()}`,
+            userId: appState.user.uid,
+            type: type,
+            description: document.getElementById('transaction-description').value || 'Nova transação',
+            amount: parseCurrency(document.getElementById('transaction-amount').value),
+            categoryId: document.getElementById('transaction-category').value,
+            date: document.getElementById('transaction-date').value,
+            status: transactionModal.form['transaction-status'].value,
+            installments: parseInt(document.getElementById('transaction-installments').value) || 1
+        };
+
+        // Lógica para caixinhas
+        if (type === 'deposit' || type === 'withdraw') {
+            const caixinha = appState.categories.find(c => c.id === newTransaction.categoryId);
+            if (caixinha) {
+                caixinha.currentAmount = caixinha.currentAmount || 0;
+                if (type === 'deposit') {
+                    caixinha.currentAmount += newTransaction.amount;
+                } else { // withdraw
+                    // Garante que não se pode resgatar mais do que o disponível
+                    if (newTransaction.amount > caixinha.currentAmount) {
+                        showToast("Valor de resgate maior que o saldo da caixinha.", "error");
+                        return;
+                    }
+                    caixinha.currentAmount -= newTransaction.amount;
+                }
             }
+        }
+        
+        // Adiciona a transação (ou transações, se houver parcelas)
+        if (newTransaction.installments > 1 && (type === 'expense' || type === 'income')) {
+            for (let i = 0; i < newTransaction.installments; i++) {
+                const installmentTransaction = { ...newTransaction };
+                const transactionDate = new Date(installmentTransaction.date);
+                transactionDate.setMonth(transactionDate.getMonth() + i);
+                
+                installmentTransaction.id = `trans_${new Date().getTime()}_${i}`;
+                installmentTransaction.date = formatDateForInput(transactionDate);
+                installmentTransaction.description = `${newTransaction.description} (${i + 1}/${newTransaction.installments})`;
+                installmentTransaction.installments = 1; // Cada parcela é uma transação única
+                
+                appState.transactions.push(installmentTransaction);
+            }
+        } else {
+            newTransaction.installments = 1;
+            appState.transactions.push(newTransaction);
+        }
 
-            card.innerHTML = `
-                <p class="font-semibold text-gray-800">${suggestion.type.charAt(0).toUpperCase() + suggestion.type.slice(1)}</p>
-                <p class="text-sm text-gray-600 mt-1">${description}</p>
-                <p class="text-xs text-gray-500 mt-1"><em>Motivo: ${suggestion.reason}</em></p>
-                <div class="suggestion-actions">
-                    <button class="action-confirm" data-index="${index}" data-action="confirm">Confirmar</button>
-                    <button class="action-ignore" data-index="${index}" data-action="ignore">Ignorar</button>
+        saveData('transactions');
+        if (type === 'deposit' || type === 'withdraw') {
+            saveData('categories'); // Salva o estado atualizado das caixinhas
+        }
+        
+        updateDashboard();
+        updateTransactionsView();
+        
+        showToast("Transação adicionada com sucesso!", "success");
+        transactionModal.close();
+    },
+
+    setupListeners: () => {
+        document.getElementById('fab-add-transaction').addEventListener('click', () => transactionModal.open());
+        document.getElementById('close-transaction-modal').addEventListener('click', transactionModal.close);
+        
+        // Etapa 1: Seleção de tipo
+        document.querySelectorAll('.step-1-type-button').forEach(button => {
+            button.addEventListener('click', () => {
+                transactionModal.form['transaction-type'].value = button.dataset.type;
+                transactionModal.goToStep(2);
+            });
+        });
+
+        // Botões de navegação do modal
+        document.querySelectorAll('.step-back-button').forEach(button => {
+            button.addEventListener('click', () => {
+                transactionModal.goToStep(transactionModal.currentStep - 1);
+            });
+        });
+        document.querySelectorAll('.step-next-button').forEach(button => {
+            button.addEventListener('click', () => {
+                transactionModal.goToStep(transactionModal.currentStep + 1);
+            });
+        });
+
+        // Botão de cancelar na etapa 1
+        document.getElementById('cancel-transaction-button-step1').addEventListener('click', transactionModal.close);
+
+        // Submit do formulário
+        transactionModal.form.addEventListener('submit', transactionModal.handleSubmit);
+    }
+};
+
+
+// ================================================================================================
+// LÓGICA DE CATEGORIAS E CAIXINHAS
+// ================================================================================================
+
+/**
+ * Atualiza a visualização da lista de categorias e caixinhas.
+ */
+const updateCategoriesView = () => {
+    const container = document.getElementById('category-list-container');
+    container.innerHTML = '';
+
+    const categories = appState.categories.filter(c => c.type === 'income' || c.type === 'expense');
+    const caixinhas = appState.categories.filter(c => c.type === 'caixinha');
+
+    if (categories.length > 0) {
+        container.innerHTML += createCategorySection('Categorias de Transação', categories);
+    }
+    if (caixinhas.length > 0) {
+        container.innerHTML += createCategorySection('Caixinhas (Metas)', caixinhas, true);
+    }
+
+    if (container.innerHTML === '') {
+        container.innerHTML = '<p class="text-center text-gray-500 py-4">Nenhuma categoria ou caixinha criada.</p>';
+    }
+};
+
+/**
+ * Cria o HTML para uma seção de categorias (Transação ou Caixinha).
+ * @param {string} title - O título da seção.
+ * @param {Array<object>} items - A lista de itens (categorias ou caixinhas).
+ * @param {boolean} [isCaixinha=false] - Indica se os itens são caixinhas.
+ * @returns {string} - O HTML da seção.
+ */
+const createCategorySection = (title, items, isCaixinha = false) => {
+    const itemsHtml = items.map(item => {
+        const badgeColor = item.type === 'income' ? 'bg-green-100 text-green-800' : 
+                         item.type === 'expense' ? 'bg-red-100 text-red-800' : 
+                         'bg-blue-100 text-blue-800';
+        
+        let progressHtml = '';
+        if (isCaixinha) {
+            const percentage = item.targetAmount > 0 ? ((item.currentAmount || 0) / item.targetAmount) * 100 : 0;
+            progressHtml = `
+                <div class="mt-2">
+                    <div class="flex justify-between text-sm font-medium text-gray-600">
+                        <span>${formatCurrency(item.currentAmount || 0)}</span>
+                        <span>${formatCurrency(item.targetAmount)}</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2.5 mt-1">
+                        <div class="bg-blue-600 h-2.5 rounded-full" style="width: ${Math.min(percentage, 100)}%"></div>
+                    </div>
                 </div>
             `;
-            categoryOptimizationSuggestions.appendChild(card);
+        }
+
+        return `
+            <div class="bg-white p-4 rounded-lg shadow-sm border">
+                <div class="flex justify-between items-start">
+                    <div>
+                        <p class="font-semibold text-lg">${item.name}</p>
+                        <span class="text-xs font-medium px-2 py-1 rounded-full ${badgeColor}">${item.type}</span>
+                    </div>
+                    <!-- Botão de editar/excluir (a ser implementado) -->
+                </div>
+                ${progressHtml}
+            </div>
+        `;
+    }).join('');
+
+    return `
+        <div class="mb-8">
+            <h3 class="text-xl font-bold mb-4">${title}</h3>
+            <div class="space-y-4">${itemsHtml}</div>
+        </div>
+    `;
+};
+
+// ================================================================================================
+// LÓGICA DO MODAL DE CATEGORIAS
+// ================================================================================================
+
+const categoryModal = {
+    element: document.getElementById('category-modal'),
+    form: document.getElementById('category-form'),
+    title: document.getElementById('category-modal-title'),
+    isEditing: false,
+    editingId: null,
+
+    open: (categoryId = null) => {
+        categoryModal.isEditing = !!categoryId;
+        categoryModal.editingId = categoryId;
+        categoryModal.form.reset();
+        
+        categoryModal.title.textContent = categoryModal.isEditing ? 'Editar Categoria' : 'Adicionar Nova Categoria';
+        
+        if (categoryModal.isEditing) {
+            const category = appState.categories.find(c => c.id === categoryId);
+            // Preencher campos para edição (a ser implementado)
+        }
+
+        // Mostra/esconde o campo de valor alvo para caixinhas
+        const typeRadios = categoryModal.form.elements['category-type'];
+        const targetAmountField = document.getElementById('target-amount-field');
+        
+        const updateVisibility = () => {
+            targetAmountField.classList.toggle('hidden', typeRadios.value !== 'caixinha');
+        };
+        
+        Array.from(typeRadios).forEach(radio => {
+            radio.addEventListener('change', updateVisibility);
         });
+        updateVisibility(); // Executa na abertura
+
+        categoryModal.element.classList.add('active');
+    },
+    
+    close: () => {
+        categoryModal.element.classList.remove('active');
+    },
+
+    handleSubmit: (e) => {
+        e.preventDefault();
+        const name = document.getElementById('category-name').value;
+        const type = categoryModal.form['category-type'].value;
+        const targetAmount = parseCurrency(document.getElementById('category-target-amount').value);
+
+        if (categoryModal.isEditing) {
+            // Lógica de edição
+        } else {
+            const newCategory = {
+                id: `cat_${new Date().getTime()}`,
+                userId: appState.user.uid,
+                name,
+                type,
+                priority: type === 'caixinha' ? null : categoryModal.form['category-priority'].value,
+                targetAmount: type === 'caixinha' ? targetAmount : null,
+                currentAmount: type === 'caixinha' ? 0 : null
+            };
+            appState.categories.push(newCategory);
+        }
+
+        saveData('categories');
+        updateCategoriesView();
+        populateCategoryFilter(); // Atualiza os filtros de transação
+        
+        showToast(`Categoria "${name}" salva com sucesso!`, "success");
+        categoryModal.close();
+    },
+
+    setupListeners: () => {
+        document.getElementById('add-new-category-button').addEventListener('click', () => categoryModal.open());
+        document.getElementById('add-category-quick-button').addEventListener('click', () => {
+             // Fecha o modal de transação antes de abrir o de categoria
+            transactionModal.close();
+            categoryModal.open();
+        });
+        document.getElementById('close-category-modal').addEventListener('click', categoryModal.close);
+        document.getElementById('cancel-category-button').addEventListener('click', categoryModal.close);
+        categoryModal.form.addEventListener('submit', categoryModal.handleSubmit);
+    }
+};
+
+// ================================================================================================
+// LÓGICA DE ORÇAMENTOS (BUDGET)
+// ================================================================================================
+
+/**
+ * Atualiza a visualização da lista de orçamentos.
+ */
+const updateBudgetsView = () => {
+    const container = document.getElementById('budget-list-container');
+    const noBudgetsMessage = document.getElementById('no-budgets-message');
+    container.innerHTML = ''; // Limpa antes de renderizar
+
+    const budgets = appState.budgets;
+
+    if (budgets.length === 0) {
+        container.appendChild(noBudgetsMessage);
+        noBudgetsMessage.classList.remove('hidden');
+        return;
     }
 
+    noBudgetsMessage.classList.add('hidden');
+    
+    budgets.forEach(budget => {
+        const category = appState.categories.find(c => c.id === budget.categoryId);
+        if (!category) return; // Se a categoria foi excluída, não mostra o orçamento
 
-    optimizeCategoriesButton.addEventListener('click', openCategoryOptimizationModal);
-    closeCategoryOptimizationModalButton.addEventListener('click', closeCategoryOptimizationModal);
-    closeCategoryOptimizationButton.addEventListener('click', closeCategoryOptimizationModal);
+        const spent = appState.transactions
+            .filter(t => t.categoryId === budget.categoryId && new Date(t.date).getMonth() === new Date().getMonth())
+            .reduce((sum, t) => sum + t.amount, 0);
 
-    // Event listener para o botão "Continuar" da tela de Splash
-    continueToAppButton.addEventListener('click', () => {
-        splashScreen.classList.add('hidden');
-        appContent.classList.remove('hidden');
-        showPage('dashboard');
+        const percentage = budget.amount > 0 ? (spent / budget.amount) * 100 : 0;
+        const progressBarColor = percentage > 100 ? 'bg-red-500' : 'bg-blue-600';
+
+        const budgetCard = document.createElement('div');
+        budgetCard.className = 'bg-white p-6 rounded-lg shadow-md';
+        budgetCard.innerHTML = `
+            <div class="flex justify-between items-center mb-2">
+                <p class="font-semibold text-lg">${category.name}</p>
+                <p class="text-sm text-gray-500">${formatCurrency(budget.amount)}</p>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-4">
+                <div class="${progressBarColor} h-4 rounded-full" style="width: ${Math.min(percentage, 100)}%;"></div>
+            </div>
+            <div class="flex justify-between text-sm mt-2">
+                <span class="text-gray-600">Gasto: ${formatCurrency(spent)}</span>
+                <span class="font-medium ${percentage > 100 ? 'text-red-500' : 'text-gray-600'}">
+                    ${percentage.toFixed(0)}%
+                </span>
+            </div>
+        `;
+        container.appendChild(budgetCard);
+    });
+};
+
+// ================================================================================================
+// LÓGICA DO MODAL DE ORÇAMENTO
+// ================================================================================================
+const budgetModal = {
+    element: document.getElementById('budget-modal'),
+    form: document.getElementById('budget-form'),
+    
+    open: () => {
+        budgetModal.form.reset();
+        const categorySelect = document.getElementById('budget-category');
+        categorySelect.innerHTML = '';
+        
+        // Popula apenas com categorias de despesa que ainda não têm orçamento
+        const categoriesWithBudget = appState.budgets.map(b => b.categoryId);
+        const availableCategories = appState.categories.filter(c => c.type === 'expense' && !categoriesWithBudget.includes(c.id));
+        
+        availableCategories.forEach(c => {
+            const option = document.createElement('option');
+            option.value = c.id;
+            option.textContent = c.name;
+            categorySelect.appendChild(option);
+        });
+
+        if (availableCategories.length === 0) {
+            showToast("Todas as categorias de despesa já têm um orçamento.", "info");
+            return;
+        }
+        
+        budgetModal.element.classList.add('active');
+    },
+
+    close: () => {
+        budgetModal.element.classList.remove('active');
+    },
+
+    handleSubmit: (e) => {
+        e.preventDefault();
+        const categoryId = document.getElementById('budget-category').value;
+        const amount = parseCurrency(document.getElementById('budget-amount').value);
+
+        const newBudget = {
+            id: `budget_${new Date().getTime()}`,
+            userId: appState.user.uid,
+            categoryId,
+            amount,
+            month: new Date().getMonth(), // Orçamento para o mês atual
+            year: new Date().getFullYear()
+        };
+
+        appState.budgets.push(newBudget);
+        saveData('budgets');
+        updateBudgetsView();
+        
+        showToast("Orçamento salvo com sucesso!", "success");
+        budgetModal.close();
+    },
+
+    setupListeners: () => {
+        document.getElementById('configure-budget-button').addEventListener('click', budgetModal.open);
+        document.getElementById('close-budget-modal').addEventListener('click', budgetModal.close);
+        document.getElementById('cancel-budget-button').addEventListener('click', budgetModal.close);
+        budgetModal.form.addEventListener('submit', budgetModal.handleSubmit);
+    }
+};
+
+// ================================================================================================
+// LÓGICA DO ASSISTENTE DE IA (GEMINI)
+// ================================================================================================
+
+/**
+ * Configura os listeners e a lógica inicial para o assistente de IA.
+ */
+const setupAIAssistant = () => {
+    const apiKey = JSON.parse(localStorage.getItem('financas-claras-api-keys'))?.[0];
+    appState.activeApiKey = apiKey;
+    
+    const chatInput = document.getElementById('chat-input');
+    const sendButton = document.getElementById('chat-send-button');
+    const apiKeyIndicator = document.getElementById('active-api-key-indicator');
+
+    if (apiKey) {
+        chatInput.disabled = false;
+        sendButton.disabled = false;
+        chatInput.placeholder = 'Pergunte sobre suas finanças...';
+        apiKeyIndicator.textContent = `API: ...${apiKey.slice(-4)}`;
+        apiKeyIndicator.classList.remove('hidden');
+    } else {
+        chatInput.disabled = true;
+        sendButton.disabled = true;
+        chatInput.placeholder = 'Adicione uma chave de API para começar...';
+        apiKeyIndicator.classList.add('hidden');
+    }
+
+    sendButton.addEventListener('click', sendChatMessage);
+    chatInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            sendChatMessage();
+        }
     });
 
-    // PWA: Registra o Service Worker
-    if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-            navigator.serviceWorker.register('/financas-claras/service-worker.js', { scope: '/financas-claras/' })
-                .then(registration => {
-                    console.log('Service Worker registrado com sucesso:', registration);
-                })
-                .catch(error => {
-                    console.log('Falha ao registrar o Service Worker:', error);
-                });
-        });
-    }
-});
+    document.getElementById('clear-chat-button').addEventListener('click', clearChat);
+    document.getElementById('refresh-chat-data-button').addEventListener('click', refreshChatContext);
+};
 
+/**
+ * Envia uma mensagem do usuário para a IA.
+ */
+const sendChatMessage = async () => {
+    const input = document.getElementById('chat-input');
+    const message = input.value.trim();
+    if (!message || !appState.activeApiKey) return;
+
+    appendMessage(message, 'user');
+    input.value = '';
+
+    const loadingIndicator = document.getElementById('chat-loading-indicator');
+    loadingIndicator.classList.remove('hidden');
+
+    try {
+        const aiResponse = await callGeminiAPI(message);
+        appendMessage(aiResponse, 'ai');
+    } catch (error) {
+        console.error("Erro ao chamar a API Gemini:", error);
+        appendMessage("Desculpe, não consegui processar sua solicitação. Verifique sua chave de API e a conexão.", 'ai', true);
+    } finally {
+        loadingIndicator.classList.add('hidden');
+    }
+};
+
+/**
+ * Adiciona uma mensagem à interface do chat.
+ * @param {string} text - O texto da mensagem.
+ * @param {'user' | 'ai'} sender - Quem enviou a mensagem.
+ * @param {boolean} [isError=false] - Indica se a mensagem é um erro.
+ */
+const appendMessage = (text, sender, isError = false) => {
+    const messagesContainer = document.getElementById('chat-messages');
+    const messageDiv = document.createElement('div');
+    const bubbleDiv = document.createElement('div');
     
+    messageDiv.className = sender === 'user' ? 'flex justify-end' : 'flex justify-start';
+    
+    bubbleDiv.className = sender === 'user' ? 
+        'bg-blue-500 text-white p-3 rounded-xl rounded-br-none max-w-xs md:max-w-md shadow-sm' : 
+        isError ? 
+        'bg-red-100 text-red-800 p-3 rounded-xl rounded-bl-none max-w-xs md:max-w-md shadow-sm' :
+        'bg-gray-100 text-gray-800 p-3 rounded-xl rounded-bl-none max-w-xs md:max-w-md shadow-sm';
+    
+    // Converte markdown simples (como listas) em HTML
+    // NOTA: Esta é uma conversão muito básica. Uma biblioteca como 'marked' seria melhor.
+    text = text.replace(/\n/g, '<br>');
+    text = text.replace(/\* (.*?)(<br>|$)/g, '<li>$1</li>');
+    text = text.replace(/(<li>.*<\/li>)/g, '<ul>$1</ul>');
+    
+    bubbleDiv.innerHTML = text;
+    messageDiv.appendChild(bubbleDiv);
+    messagesContainer.appendChild(messageDiv);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+};
+
+/**
+ * Limpa o histórico do chat.
+ */
+const clearChat = () => {
+    const messagesContainer = document.getElementById('chat-messages');
+    messagesContainer.innerHTML = `
+        <div class="flex justify-start">
+            <div class="bg-gray-100 text-gray-800 p-3 rounded-xl rounded-bl-none max-w-xs md:max-w-md shadow-sm">
+                Olá! Sou seu assistente financeiro. Como posso ajudar?
+            </div>
+        </div>`;
+    showToast("Chat limpo.", "info");
+};
+
+/**
+ * Atualiza o contexto da IA com os dados mais recentes.
+ */
+const refreshChatContext = () => {
+    // A lógica de construção do contexto já pega os dados mais recentes de appState,
+    // então apenas notificamos o usuário.
+    showToast("Contexto da IA atualizado com seus dados mais recentes.", "success");
+};
+
+
+/**
+ * Constrói o prompt para a API Gemini, incluindo o contexto financeiro.
+ * @param {string} userMessage - A mensagem do usuário.
+ * @returns {string} - O prompt completo a ser enviado.
+ */
+const buildPrompt = (userMessage) => {
+    const financialContext = `
+        **Dados Financeiros do Usuário (Mês Atual):**
+        - **Receitas:** ${formatCurrency(appState.transactions.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0))}
+        - **Despesas:** ${formatCurrency(appState.transactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0))}
+        - **Orçamentos:** ${appState.budgets.map(b => {
+            const category = appState.categories.find(c => c.id === b.categoryId);
+            return `${category?.name}: ${formatCurrency(b.amount)}`;
+        }).join(', ') || 'Nenhum'}
+        - **Caixinhas (Metas):** ${appState.categories.filter(c => c.type === 'caixinha').map(c => `${c.name} (Meta: ${formatCurrency(c.targetAmount)}, Guardado: ${formatCurrency(c.currentAmount || 0)})`).join(', ') || 'Nenhuma'}
+        - **Últimas Transações:**
+        ${appState.transactions.slice(-5).map(t => `  * ${t.description}: ${formatCurrency(t.amount)} (${t.status})`).join('\n')}
+    `;
+
+    return `
+        **Contexto do Sistema:**
+        ${appState.aiPersona}
+        ${appState.aiPersonality}
+
+        **Contexto Financeiro Atual:**
+        ${financialContext}
+
+        ---
+
+        **Pergunta do Usuário:**
+        "${userMessage}"
+    `;
+};
+
+
+/**
+ * Chama a API do Google Gemini.
+ * @param {string} userMessage - A mensagem do usuário.
+ * @returns {Promise<string>} - A resposta da IA.
+ */
+const callGeminiAPI = async (userMessage) => {
+    const prompt = buildPrompt(userMessage);
+    const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${appState.activeApiKey}`;
+
+    const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }]
+        })
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error.message || 'Erro na API');
+    }
+
+    const data = await response.json();
+    return data.candidates[0].content.parts[0].text;
+};
+
+// ================================================================================================
+// LÓGICA DE CONFIGURAÇÕES (API, PERSONA IA)
+// ================================================================================================
+
+const apiKeysModal = {
+    element: document.getElementById('api-keys-modal'),
+    
+    open: () => {
+        const savedKeys = JSON.parse(localStorage.getItem('financas-claras-api-keys')) || [];
+        for (let i = 1; i <= 5; i++) {
+            document.getElementById(`modal-api-key-${i}`).value = savedKeys[i - 1] || '';
+        }
+        apiKeysModal.element.classList.add('active');
+    },
+
+    close: () => {
+        apiKeysModal.element.classList.remove('active');
+    },
+
+    save: () => {
+        const keys = [];
+        for (let i = 1; i <= 5; i++) {
+            const key = document.getElementById(`modal-api-key-${i}`).value.trim();
+            if (key) {
+                keys.push(key);
+            }
+        }
+        localStorage.setItem('financas-claras-api-keys', JSON.stringify(keys));
+        showToast("Chaves de API salvas com sucesso!", "success");
+        apiKeysModal.close();
+        // Re-configura o assistente com a nova chave
+        setupAIAssistant();
+    },
+
+    setupListeners: () => {
+        // O link para abrir o modal está em 'more-options', que já tem um listener de navegação.
+        // A lógica de abertura está na função navigateToPage.
+        // Precisamos adicionar listeners para os botões do modal.
+        document.querySelector('[data-page="api-management"]').addEventListener('click', (e) => {
+            e.preventDefault();
+            apiKeysModal.open();
+        });
+        document.getElementById('close-api-keys-modal').addEventListener('click', apiKeysModal.close);
+        document.getElementById('save-api-keys-modal-button').addEventListener('click', apiKeysModal.save);
+    }
+};
+
+/**
+ * Carrega a configuração da IA (persona/personalidade) do localStorage para a UI.
+ */
+const loadAIConfig = () => {
+    const persona = localStorage.getItem('financas-claras-ai-persona');
+    const personality = localStorage.getItem('financas-claras-ai-personality');
+
+    if (persona) {
+        document.getElementById('ai-persona').value = persona;
+        appState.aiPersona = persona;
+    }
+    if (personality) {
+        document.getElementById('ai-personality').value = personality;
+        appState.aiPersonality = personality;
+    }
+};
+
+/**
+ * Salva a configuração da IA da UI para o localStorage.
+ */
+const saveAIConfig = () => {
+    const persona = document.getElementById('ai-persona').value;
+    const personality = document.getElementById('ai-personality').value;
+
+    localStorage.setItem('financas-claras-ai-persona', persona);
+    localStorage.setItem('financas-claras-ai-personality', personality);
+    
+    appState.aiPersona = persona;
+    appState.aiPersonality = personality;
+
+    const statusMessage = document.getElementById('ai-config-status-message');
+    statusMessage.classList.remove('hidden');
+    setTimeout(() => {
+        statusMessage.classList.add('hidden');
+    }, 3000);
+    showToast("Configurações da IA salvas!", "success");
+};
+
+// ================================================================================================
+// DADOS DE AMOSTRA E INICIALIZAÇÃO GERAL
+// ================================================================================================
+
+/**
+ * Retorna uma lista de categorias de exemplo.
+ * @returns {Array<object>}
+ */
+function getSampleCategories() {
+    return [
+      { id: 'cat_1', name: 'Salário', type: 'income', priority: null },
+      { id: 'cat_2', name: 'Aluguel', type: 'expense', priority: 'essential' },
+      { id: 'cat_3', name: 'Supermercado', type: 'expense', priority: 'essential' },
+      { id: 'cat_4', name: 'Transporte', type: 'expense', priority: 'essential' },
+      { id: 'cat_5', name: 'Lazer', type: 'expense', priority: 'non-essential' },
+      { id: 'cat_6', name: 'Saúde', type: 'expense', priority: 'essential' },
+      { id: 'cat_7', name: 'Viagem dos Sonhos', type: 'caixinha', currentAmount: 1500, targetAmount: 10000 },
+      { id: 'cat_8', name: 'Freelancer', type: 'income', priority: null },
+      { id: 'cat_9', name: 'Educação', type: 'expense', priority: 'non-essential'},
+      { id: 'cat_10', name: 'Reserva de Emergência', type: 'caixinha', currentAmount: 5000, targetAmount: 15000 },
+    ];
+}
+
+/**
+ * Retorna uma lista de transações de exemplo para o mês atual e anterior.
+ * @returns {Array<object>}
+ */
+function getSampleTransactions() {
+    const today = new Date();
+    const currentMonth = today.getMonth();
+    const currentYear = today.getFullYear();
+    
+    const transactions = [
+      // Mês Atual
+      { id: 'trans_1', description: 'Salário Mensal', type: 'income', categoryId: 'cat_1', amount: 5000, date: new Date(currentYear, currentMonth, 5).toISOString(), status: 'Recebido', installments: 1 },
+      { id: 'trans_2', description: 'Pagamento Aluguel', type: 'expense', categoryId: 'cat_2', amount: 1500, date: new Date(currentYear, currentMonth, 10).toISOString(), status: 'Pago', installments: 1 },
+      { id: 'trans_3', description: 'Compras da Semana', type: 'expense', categoryId: 'cat_3', amount: 350, date: new Date(currentYear, currentMonth, 12).toISOString(), status: 'Pago', installments: 1 },
+      { id: 'trans_4', description: 'Crédito App Transporte', type: 'expense', categoryId: 'cat_4', amount: 100, date: new Date(currentYear, currentMonth, 15).toISOString(), status: 'Pendente', installments: 1 },
+      { id: 'trans_5', description: 'Cinema', type: 'expense', categoryId: 'cat_5', amount: 80, date: new Date(currentYear, currentMonth, 18).toISOString(), status: 'Pago', installments: 1 },
+      { id: 'trans_6', description: 'Depósito Viagem', type: 'deposit', categoryId: 'cat_7', amount: 500, date: new Date(currentYear, currentMonth, 6).toISOString(), status: 'Confirmado', installments: 1 },
+      { id: 'trans_7', description: 'Projeto Freelancer X', type: 'income', categoryId: 'cat_8', amount: 750, date: new Date(currentYear, currentMonth, 20).toISOString(), status: 'Recebido', installments: 1 },
+      // Mês Anterior
+      { id: 'trans_8', description: 'Salário Mensal', type: 'income', categoryId: 'cat_1', amount: 5000, date: new Date(currentYear, currentMonth - 1, 5).toISOString(), status: 'Recebido', installments: 1 },
+      { id: 'trans_9', description: 'Pagamento Aluguel', type: 'expense', categoryId: 'cat_2', amount: 1500, date: new Date(currentYear, currentMonth - 1, 10).toISOString(), status: 'Pago', installments: 1 },
+    ];
+    return transactions;
+}
+
+/**
+ * Função principal que é executada quando o DOM está totalmente carregado.
+ */
+document.addEventListener('DOMContentLoaded', () => {
+    // Configura listeners de navegação
+    setupNavigationListeners();
+    // Gerencia o estado de autenticação (decide se mostra login ou o app)
+    manageAuthState();
+    // Configura os listeners dos modais
+    transactionModal.setupListeners();
+    categoryModal.setupListeners();
+    budgetModal.setupListeners();
+    apiKeysModal.setupListeners();
+    // Configura listeners dos controles do gráfico
+    setupChartControls();
+    // Configura listeners dos controles de transações
+    setupTransactionControls();
+    // Configura listener do botão de salvar config da IA
+    document.getElementById('save-ai-config-button').addEventListener('click', saveAIConfig);
+});
