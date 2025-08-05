@@ -10,6 +10,10 @@
   "scope": "/financas-claras/",
   "id": "/financas-claras/",
   "lang": "pt-BR",
+  "launch_handler": {
+    "client_mode": "navigate-existing"
+  },
+  "categories": ["finance", "lifestyle", "utilities"],
   "icons": [
     {
       "src": "https://placehold.co/192x192.png",
