@@ -264,11 +264,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const nextMonthButton = document.getElementById('next-month-button');
     const currentMonthDisplay = document.getElementById('current-month-display');
     // NOVO: Elementos de Filtro de Transações
-    const filterTypeSelect = document.getElementById('filter-type');
+    const filterPillsContainer = document.getElementById('filter-container-pills');
     const filterCategorySelect = document.getElementById('filter-category');
-    const filterStatusSelect = document.getElementById('filter-status');
-    const resetFiltersButton = document.getElementById('reset-filters-button');
-
 
 
     // ATUALIZADO: Variáveis de controle para o fluxo multi-etapas do modal de transação
@@ -282,10 +279,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 
     // Elementos do Dashboard (agora com os resumos principais)
+    // IDs dos resumos no Dashboard
     const dashboardCurrentBalance = document.getElementById('dashboard-current-balance');
     const dashboardPaidExpenses = document.getElementById('dashboard-paid-expenses');
     const dashboardPendingExpenses = document.getElementById('dashboard-pending-expenses');
     const dashboardTotalCaixinhasSaved = document.getElementById('dashboard-total-caixinhas-saved');
+    
+    // NOVO: IDs do resumo compacto na tela de transações
+    const compactBalance = document.getElementById('compact-balance');
+    const compactPending = document.getElementById('compact-pending');
+    const compactSaved = document.getElementById('compact-saved');
+
 
 
     // Elementos do Orçamento
@@ -716,17 +720,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // Função para atualizar os cards de resumo no Dashboard
+    // Função para atualizar os cards de resumo no Dashboard e na aba Transações
     function updateDashboardAndTransactionSummaries() {
         let totalGlobalIncome = 0;
         let totalGlobalPaidExpenses = 0;
         let totalPaidExpensesThisMonth = 0;
         let totalPendingExpenses = 0;
         const today = new Date();
-        today.setHours(0, 0, 0, 0); // Zera a hora para comparar apenas a data
-        const currentMonthYYYYMM = getCurrentMonthYYYYMM(currentMonth); // Mês selecionado
+        today.setHours(0, 0, 0, 0);
+        const currentMonthYYYYMM = getCurrentMonthYYYYMM(currentMonth);
 
-        // Calcula o Saldo Atual Global (Receitas Totais - Despesas Pagas Totais)
         transactions.forEach(t => {
             const isConfirmed = t.status === 'Recebido' || t.status === 'Pago' || t.status === 'Confirmado';
             if (isConfirmed) {
@@ -735,7 +738,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 } else if (t.type === 'expense') {
                     totalGlobalPaidExpenses += parseFloat(t.amount);
                 } else if (t.type === 'caixinha') {
-                    // Para o saldo, depósitos saem do dinheiro disponível e resgates entram
                     if (t.transactionType === 'deposit') {
                         totalGlobalPaidExpenses += parseFloat(t.amount);
                     } else if (t.transactionType === 'withdraw') {
@@ -744,33 +746,37 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             }
         });
-    
-        // Calcula Despesas Pagas do Mês Selecionado
+
         transactions.forEach(t => {
             const transactionMonth = t.date.substring(0, 7);
             if (t.type === 'expense' && (t.status === 'Pago') && transactionMonth === currentMonthYYYYMM) {
                 totalPaidExpensesThisMonth += parseFloat(t.amount);
             }
         });
-    
-        // Calcula Despesas Pendentes (Vencidas ou que vencem no futuro)
+
         transactions.forEach(t => {
             if (t.type === 'expense' && t.status === 'Pendente') {
                 totalPendingExpenses += parseFloat(t.amount);
             }
         });
-    
+
         const cumulativeBalance = totalGlobalIncome - totalGlobalPaidExpenses;
-        dashboardCurrentBalance.textContent = formatCurrency(cumulativeBalance);
-        dashboardPaidExpenses.textContent = formatCurrency(totalPaidExpensesThisMonth); // Atualizado para o valor do mês
-        dashboardPendingExpenses.textContent = formatCurrency(totalPendingExpenses);
-    
-        // Calcula o Total Guardado em Caixinhas (cumulativo)
-        let totalCaixinhasSaved = categories
+        const totalCaixinhasSaved = categories
             .filter(cat => cat.type === 'caixinha')
             .reduce((sum, caixinha) => sum + parseFloat(caixinha.savedAmount || 0), 0);
-        dashboardTotalCaixinhasSaved.textContent = formatCurrency(totalCaixinhasSaved);
+
+        // Atualiza Dashboard
+        if (dashboardCurrentBalance) dashboardCurrentBalance.textContent = formatCurrency(cumulativeBalance);
+        if (dashboardPaidExpenses) dashboardPaidExpenses.textContent = formatCurrency(totalPaidExpensesThisMonth);
+        if (dashboardPendingExpenses) dashboardPendingExpenses.textContent = formatCurrency(totalPendingExpenses);
+        if (dashboardTotalCaixinhasSaved) dashboardTotalCaixinhasSaved.textContent = formatCurrency(totalCaixinhasSaved);
+
+        // Atualiza Cabeçalho Compacto na tela de Transações
+        if (compactBalance) compactBalance.textContent = formatCurrency(cumulativeBalance);
+        if (compactPending) compactPending.textContent = formatCurrency(totalPendingExpenses);
+        if (compactSaved) compactSaved.textContent = formatCurrency(totalCaixinhasSaved);
     }
+
 
 
     // --- Funções de Gerenciamento de Categorias ---
@@ -1131,17 +1137,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         const currentMonthYYYYMM = getCurrentMonthYYYYMM(currentMonth);
 
         // APLICA FILTROS (NOVO)
-        const typeFilter = filterTypeSelect.value;
+        const typeFilter = document.querySelector('.filter-pill[data-filter-group="type"].active')?.dataset.value || 'all';
+        const statusFilter = document.querySelector('.filter-pill[data-filter-group="status"].active')?.dataset.value || 'all';
         const categoryFilter = filterCategorySelect.value;
-        const statusFilter = filterStatusSelect.value;
 
         const filteredTransactions = transactions.filter(t => {
             const transactionMonth = t.date.substring(0, 7);
             if (transactionMonth !== currentMonthYYYYMM) return false;
             
             if (typeFilter !== 'all' && t.type !== typeFilter) return false;
-            if (categoryFilter !== 'all' && t.categoryId !== categoryFilter) return false;
             if (statusFilter !== 'all' && t.status !== statusFilter) return false;
+            if (categoryFilter !== 'all' && t.categoryId !== categoryFilter) return false;
             
             return true;
         });
@@ -2289,7 +2295,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             chatMessagesDiv.innerHTML = '';
             chatHistory = []; // Limpa o histórico da sessão
             hasConsultedFinancialData = false; // Permite que a próxima mensagem recarregue os dados
-            appendMessage('ai', 'Chat limpo. Como posso te ajudar a começar de novo?', 'info');
+            appendMessage('ai', 'Chat limpo. Como posso ajudar a começar de novo?', 'info');
         });
     }
 
@@ -2490,7 +2496,54 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // --- Funções e Listeners de Filtros (NOVO) ---
+    function renderFilterPills() {
+        filterPillsContainer.innerHTML = ''; // Limpa os filtros existentes
+    
+        const filterGroups = {
+            type: [
+                { label: 'Todos', value: 'all' },
+                { label: 'Receitas', value: 'income' },
+                { label: 'Despesas', value: 'expense' },
+                { label: 'Caixinhas', value: 'caixinha' }
+            ],
+            status: [
+                { label: 'Todos', value: 'all' },
+                { label: 'Pagos', value: 'Pago' },
+                { label: 'Recebidos', value: 'Recebido' },
+                { label: 'Pendentes', value: 'Pendente' }
+            ]
+        };
+    
+        // Cria os botões para 'type'
+        filterGroups.type.forEach((filter, index) => {
+            const pill = document.createElement('button');
+            pill.className = 'filter-pill';
+            pill.textContent = filter.label;
+            pill.dataset.value = filter.value;
+            pill.dataset.filterGroup = 'type';
+            if (index === 0) pill.classList.add('active');
+            filterPillsContainer.appendChild(pill);
+        });
+    
+        // Cria um separador visual
+        const separator = document.createElement('div');
+        separator.className = 'filter-separator';
+        filterPillsContainer.appendChild(separator);
+    
+        // Cria os botões para 'status'
+        filterGroups.status.forEach((filter, index) => {
+            const pill = document.createElement('button');
+            pill.className = 'filter-pill';
+            pill.textContent = filter.label;
+            pill.dataset.value = filter.value;
+            pill.dataset.filterGroup = 'status';
+            if (index === 0) pill.classList.add('active');
+            filterPillsContainer.appendChild(pill);
+        });
+    }
+    
     function populateFilterCategories() {
+        const savedValue = filterCategorySelect.value;
         filterCategorySelect.innerHTML = '<option value="all">Todas as Categorias</option>';
         categories.forEach(cat => {
             const option = document.createElement('option');
@@ -2498,17 +2551,28 @@ document.addEventListener('DOMContentLoaded', async () => {
             option.textContent = cat.name;
             filterCategorySelect.appendChild(option);
         });
+        filterCategorySelect.value = savedValue;
     }
     
-    filterTypeSelect.addEventListener('change', renderTransactions);
-    filterCategorySelect.addEventListener('change', renderTransactions);
-    filterStatusSelect.addEventListener('change', renderTransactions);
-    resetFiltersButton.addEventListener('click', () => {
-        filterTypeSelect.value = 'all';
-        filterCategorySelect.value = 'all';
-        filterStatusSelect.value = 'all';
-        renderTransactions();
+    // Delegação de evento para os botões de filtro
+    filterPillsContainer.addEventListener('click', (e) => {
+        if (e.target.classList.contains('filter-pill')) {
+            const pill = e.target;
+            const group = pill.dataset.filterGroup;
+    
+            // Remove a classe 'active' de outros botões no mesmo grupo
+            document.querySelectorAll(`.filter-pill[data-filter-group="${group}"]`).forEach(p => p.classList.remove('active'));
+            // Adiciona 'active' ao botão clicado
+            pill.classList.add('active');
+    
+            renderTransactions(); // Re-renderiza a lista de transações com o novo filtro
+        }
     });
+    
+    filterCategorySelect.addEventListener('change', renderTransactions);
+    
+    renderFilterPills(); // Chama a função para criar os filtros iniciais
+
 
     // Fecha dropdowns de ação ao clicar fora
     document.addEventListener('click', (e) => {
@@ -3091,3 +3155,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
 });
+
+    
+
+    
