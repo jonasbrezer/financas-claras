@@ -456,3 +456,95 @@ body.chat-active main {
     background-color: var(--color-blue-primary);
     color: white;
 }
+
+/* NOVO: Estilos para o cabeçalho compacto de resumo */
+.compact-summary-header {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    background-color: #ffffff;
+    padding: 0.75rem; /* 12px */
+    border-radius: 0.75rem; /* 12px */
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    margin-bottom: 1rem; /* 16px */
+}
+
+.compact-summary-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem; /* 8px */
+}
+
+.compact-summary-item i {
+    font-size: 1.125rem; /* 18px */
+}
+
+.compact-summary-item div {
+    display: flex;
+    flex-direction: column;
+}
+
+.compact-summary-item .label {
+    font-size: 0.75rem; /* 12px */
+    color: #6b7280; /* text-gray-500 */
+}
+
+.compact-summary-item .value {
+    font-size: 0.875rem; /* 14px */
+    font-weight: 600; /* font-semibold */
+    color: #1f2937; /* text-gray-800 */
+}
+
+/* NOVO: Estilos para os filtros em pílula */
+.filter-pills-container {
+    display: flex;
+    overflow-x: auto;
+    gap: 8px;
+    padding-bottom: 8px; /* Espaço para a barra de rolagem não cobrir */
+    scrollbar-width: none; /* Firefox */
+}
+.filter-pills-container::-webkit-scrollbar {
+    display: none; /* Chrome, Safari, and Opera */
+}
+.filter-pill {
+    padding: 6px 14px;
+    border-radius: 9999px; /* rounded-full */
+    font-size: 14px;
+    font-weight: 500;
+    background-color: #f3f4f6; /* gray-100 */
+    color: #4b5563; /* gray-600 */
+    white-space: nowrap;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+.filter-pill:hover {
+    background-color: #e5e7eb; /* gray-200 */
+}
+.filter-pill.active {
+    background-color: var(--color-blue-primary);
+    color: white;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.filter-separator {
+    width: 1px;
+    background-color: #e5e7eb; /* gray-200 */
+    margin: 4px 0;
+}
+.filter-category-select {
+    width: 100%;
+    border: 1px solid #d1d5db; /* border-gray-300 */
+    border-radius: 0.5rem; /* rounded-lg */
+    padding: 8px 12px;
+    background-color: white;
+    font-size: 14px;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.5rem center;
+    background-repeat: no-repeat;
+    background-size: 1.5em 1.5em;
+    padding-right: 2.5rem;
+}
+
+    
