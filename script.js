@@ -146,16 +146,20 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // URLs das imagens de capa
     const splashImages = [
-        'https://github.com/jonasbrezer/financas-claras/blob/main/Capa01.png?raw=true',
-        'https://github.com/jonasbrezer/financas-claras/blob/main/Capa02.png?raw=true',
-        'https://github.com/jonasbrezer/financas-claras/blob/main/Capa03.png?raw=true',
-        'https://github.com/jonasbrezer/financas-claras/blob/main/Capa04.png?raw=true',
-        'https://github.com/jonasbrezer/financas-claras/blob/main/Capa05.png?raw=true'
+        'https://jonasbrezer.github.io/financas-claras/Capa01.png',
+        'https://jonasbrezer.github.io/financas-claras/Capa02.png',
+        'https://jonasbrezer.github.io/financas-claras/Capa03.png',
+        'https://jonasbrezer.github.io/financas-claras/Capa04.png',
+        'https://jonasbrezer.github.io/financas-claras/Capa05.png'
     ];
 
 
     // Função para exibir a tela de splash
     function showSplashScreen() {
+        // Se a tela de splash estiver oculta no desktop, não faz nada
+        if (window.getComputedStyle(splashScreen).display === 'none') {
+            return;
+        }
         const randomIndex = Math.floor(Math.random() * splashImages.length);
         splashImage.src = splashImages[randomIndex];
         splashScreen.classList.remove('hidden');
@@ -354,7 +358,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Botões de Sair
     const logoutButtonDesktop = document.getElementById('logout-button-desktop');
-    const logoutButtonMobile = document.getElementById('logout-button-mobile');
     
     // NOVO: Elementos do Modal de Otimização de Categorias
     const optimizeCategoriesButton = document.getElementById('optimize-categories-button');
@@ -1137,8 +1140,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         const currentMonthYYYYMM = getCurrentMonthYYYYMM(currentMonth);
 
         // APLICA FILTROS (NOVO)
-        const typeFilter = document.querySelector('.filter-pill[data-filter-group="type"].active')?.dataset.value || 'all';
-        const statusFilter = document.querySelector('.filter-pill[data-filter-group="status"].active')?.dataset.value || 'all';
+        const activeTypePill = document.querySelector('.filter-pill[data-filter-group="type"].active');
+        const typeFilter = activeTypePill ? activeTypePill.dataset.value : 'all';
+
+        const activeStatusPill = document.querySelector('.filter-pill[data-filter-group="status"].active');
+        const statusFilter = activeStatusPill ? activeStatusPill.dataset.value : 'all';
+        
         const categoryFilter = filterCategorySelect.value;
 
         const filteredTransactions = transactions.filter(t => {
@@ -2166,7 +2173,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                     loginScreen.classList.add('hidden');
                     console.log("Usuário autenticado:", userId);
                     await loadAllDataFromFirestore();
-                    showSplashScreen(); // MOSTRA O SPLASH APÓS O LOGIN
+                    // Lógica para decidir entre splash e app content
+                    if (window.getComputedStyle(splashScreen).display !== 'none') {
+                        showSplashScreen(); 
+                    } else {
+                        // Se splash estiver oculto (desktop), mostra o app direto
+                        appContent.classList.remove('hidden');
+                        showPage('dashboard');
+                    }
                 } else {
                     // Nenhum usuário logado
                     userId = null;
@@ -2241,20 +2255,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         });
     }
-
-    // Event listener para o botão de logout (mobile)
-    if (logoutButtonMobile) {
-        logoutButtonMobile.addEventListener('click', async () => {
-            try {
-                await signOut(auth);
-                console.log("Utilizador desconectado com sucesso.");
-                // UI will be handled by onAuthStateChanged listener
-            } catch (error) {
-                console.error("Erro ao desconectar:", error.message);
-            }
-        });
-    }
-
 
     // Carregar a página inicial (dashboard) ao carregar (inicialmente oculto até logar)
     // showPage('dashboard'); // Esta chamada será feita dentro do onAuthStateChanged
@@ -2501,13 +2501,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     
         const filterGroups = {
             type: [
-                { label: 'Todos', value: 'all' },
                 { label: 'Receitas', value: 'income' },
                 { label: 'Despesas', value: 'expense' },
                 { label: 'Caixinhas', value: 'caixinha' }
             ],
             status: [
-                { label: 'Todos', value: 'all' },
                 { label: 'Pagos', value: 'Pago' },
                 { label: 'Recebidos', value: 'Recebido' },
                 { label: 'Pendentes', value: 'Pendente' }
@@ -2515,13 +2513,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         };
     
         // Cria os botões para 'type'
-        filterGroups.type.forEach((filter, index) => {
+        filterGroups.type.forEach((filter) => {
             const pill = document.createElement('button');
             pill.className = 'filter-pill';
             pill.textContent = filter.label;
             pill.dataset.value = filter.value;
             pill.dataset.filterGroup = 'type';
-            if (index === 0) pill.classList.add('active');
             filterPillsContainer.appendChild(pill);
         });
     
@@ -2531,13 +2528,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         filterPillsContainer.appendChild(separator);
     
         // Cria os botões para 'status'
-        filterGroups.status.forEach((filter, index) => {
+        filterGroups.status.forEach((filter) => {
             const pill = document.createElement('button');
             pill.className = 'filter-pill';
             pill.textContent = filter.label;
             pill.dataset.value = filter.value;
             pill.dataset.filterGroup = 'status';
-            if (index === 0) pill.classList.add('active');
             filterPillsContainer.appendChild(pill);
         });
     }
@@ -2559,11 +2555,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (e.target.classList.contains('filter-pill')) {
             const pill = e.target;
             const group = pill.dataset.filterGroup;
-    
-            // Remove a classe 'active' de outros botões no mesmo grupo
-            document.querySelectorAll(`.filter-pill[data-filter-group="${group}"]`).forEach(p => p.classList.remove('active'));
-            // Adiciona 'active' ao botão clicado
-            pill.classList.add('active');
+            
+            // Lógica para deselecionar
+            if (pill.classList.contains('active')) {
+                pill.classList.remove('active');
+            } else {
+                // Remove a classe 'active' de outros botões no mesmo grupo
+                document.querySelectorAll(`.filter-pill[data-filter-group="${group}"]`).forEach(p => p.classList.remove('active'));
+                // Adiciona 'active' ao botão clicado
+                pill.classList.add('active');
+            }
     
             renderTransactions(); // Re-renderiza a lista de transações com o novo filtro
         }
@@ -3155,6 +3156,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
 });
+
+    
 
     
 

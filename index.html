@@ -14,9 +14,9 @@
 </head>
 <body class="bg-[var(--color-blue-light)]">
 
-    <!-- Tela de Splash -->
-    <div id="splash-screen" class="fixed inset-0 bg-white z-[2000] flex flex-col items-center justify-center transition-opacity duration-500">
-        <img id="splash-image" src="" alt="Capa do App Finanças Claras" class="w-full h-full object-cover">
+    <!-- Tela de Splash (Agora só para mobile) -->
+    <div id="splash-screen" class="fixed inset-0 bg-white z-[2000] flex flex-col items-center justify-center transition-opacity duration-500 md:hidden">
+        <img id="splash-image" src="" alt="Capa do App Finanças Claras" class="w-full h-full object-fill">
         <div class="absolute bottom-10 left-0 right-0 px-4">
              <button id="continue-to-app-button" class="w-full bg-[var(--color-blue-primary)] text-white font-bold py-4 px-4 rounded-xl shadow-lg hover:bg-opacity-90 transition-transform transform hover:scale-105">
                 Continuar para o App
@@ -670,5 +670,3 @@
     <script src="script.js" type="module"></script>
 </body>
 </html>
-
-    
