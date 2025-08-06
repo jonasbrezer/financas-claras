@@ -65,6 +65,11 @@ const ESSENTIAL_COLORS = ['#3498db', '#2980b9', '#8e44ad', '#34495e', '#6c5ce7',
 const NON_ESSENTIAL_COLORS = ['#e74c3c', '#e67e22', '#f1c40f', '#ff7675', '#d63031', '#fdcb6e', '#fab1a0', '#ffbe76'];
 const CAIXINHA_COLORS = ['#a29bfe', '#74b9ff', '#81ecec', '#ffeaa7', '#00cec9', '#6c5ce7', '#fd79a8', '#f0932b'];
 
+// NOVO: Fila para processar sugestões de despesas da IA
+let aiSuggestedExpensesQueue = [];
+// NOVO: Armazenamento para as sugestões de otimização de categoria
+let categoryOptimizationSuggestionsStore = [];
+
 
 // --- Funções Auxiliares ---
 
@@ -166,11 +171,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     // Função para exibir um modal de confirmação customizado
-    function showConfirmationModal(title, message, callback) {
+    function showConfirmationModal(title, message, callback, cancelCallback = null) {
         confirmationModalTitle.textContent = title;
         confirmationModalMessage.textContent = message;
         confirmActionCallback = callback;
         confirmationModal.classList.add('active');
+
+        // Adiciona um manipulador de clique para o botão de cancelar que executa o cancelCallback
+        cancelConfirmationButton.onclick = () => {
+            closeConfirmationModal();
+            if (cancelCallback) {
+                cancelCallback();
+            }
+        };
     }
 
     // Função para fechar o modal de confirmação
@@ -186,9 +199,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         closeConfirmationModal();
     });
-
-    // Event listener para o botão de cancelar no modal de confirmação
-    cancelConfirmationButton.addEventListener('click', closeConfirmationModal);
 
     // --- Funções de Persistência (Firebase Firestore) ---
     
@@ -270,6 +280,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // NOVO: Elementos de Filtro de Transações
     const filterPillsContainer = document.getElementById('filter-container-pills');
     const filterCategorySelect = document.getElementById('filter-category');
+    // NOVO: Elementos de prévia de saldo
+    const balancePreviewContainer = document.getElementById('balance-preview-container');
+    const balancePreviewLabel = document.getElementById('balance-preview-label');
+    const balancePreviewValue = document.getElementById('balance-preview-value');
 
 
     // ATUALIZADO: Variáveis de controle para o fluxo multi-etapas do modal de transação
@@ -367,6 +381,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     const categoryOptimizationContent = document.getElementById('category-optimization-content');
     const categoryOptimizationLoadingIndicator = document.getElementById('category-optimization-loading-indicator');
     const categoryOptimizationSuggestions = document.getElementById('category-optimization-suggestions');
+    
+    // NOVO: Elementos do Modal de Análise de Despesas
+    const expenseParserButton = document.getElementById('expense-parser-button');
+    const expenseParserModal = document.getElementById('expense-parser-modal');
+    const closeExpenseParserModalButton = document.getElementById('close-expense-parser-modal');
+    const expenseParserForm = document.getElementById('expense-parser-form');
+    const expenseParserInput = document.getElementById('expense-parser-input');
+    const analyzeExpensesButton = document.getElementById('analyze-expenses-button');
 
 
     // Carrega todos os dados do Firestore
@@ -1241,22 +1263,22 @@ document.addEventListener('DOMContentLoaded', async () => {
                                             (transaction.type === 'income' && transaction.status === 'Recebido' ? 'Recebido' : 
                                             (transaction.type === 'expense' && transaction.status === 'Pago' ? 'Pago' : 
                                             (transaction.type === 'caixinha' && transaction.status === 'Confirmado' ? 'Confirmado' : '')));
-                const statusIndicatorHtml = statusIndicatorText ? `<p class="text-xs text-gray-500">${statusIndicatorText}</p>` : '';
+                const statusIndicatorHtml = statusIndicatorText ? `<p class="transaction-item-status">${statusIndicatorText}</p>` : '';
 
                 const installmentInfo = transaction.installmentNumber && transaction.totalInstallments ? 
-                                        `<span class="text-xs text-gray-500 ml-2">(Parc. ${transaction.installmentNumber}/${transaction.totalInstallments})</span>` : '';
+                                        `<span class="transaction-item-installment">(Parc. ${transaction.installmentNumber}/${transaction.totalInstallments})</span>` : '';
 
                 const transactionItem = document.createElement('div');
                 transactionItem.className = `bg-white p-4 rounded-lg shadow-sm flex justify-between items-center relative pl-8`; 
                 transactionItem.innerHTML = `
                     <div class="${bulletClass}" style="${bulletStyle}"></div>
                     <div class="flex-grow min-w-0">
-                        <p class="font-medium truncate text-gray-800">${transactionTypeDisplay} ${installmentInfo}</p>
+                        <p class="transaction-item-title">${transactionTypeDisplay} ${installmentInfo}</p>
                         ${statusIndicatorHtml}
-                        <p class="text-sm text-gray-500 truncate">${transaction.description}</p>
+                        <p class="transaction-item-description">${transaction.description}</p>
                     </div>
                     <div class="flex items-center space-x-2 ml-4">
-                        <p class="font-bold text-lg ${amountColorClass}">${amountPrefix} ${formatCurrency(transaction.amount)}</p>
+                        <p class="transaction-item-amount ${amountColorClass}">${amountPrefix} ${formatCurrency(transaction.amount)}</p>
                         <div class="relative">
                             <button class="action-menu-button p-2 rounded-full hover:bg-gray-100" data-id="${transaction.id}">
                                 <i class="fa-solid fa-ellipsis-vertical text-gray-500"></i>
@@ -1330,6 +1352,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 step.classList.add('hidden');
             }
         });
+        
+        balancePreviewContainer.classList.add('hidden');
 
         // Ações específicas para cada etapa ao navegar
         if (currentStep === 2) {
@@ -1339,11 +1363,19 @@ document.addEventListener('DOMContentLoaded', async () => {
                  transactionCategorySelect.value = savedCategory;
             }
 
-            // Mostra ou esconde o botão de sugestão de IA
-            if (selectedType === 'deposit' || selectedType === 'withdraw') {
+            // Mostra ou esconde o botão de sugestão de IA e a prévia de saldo
+            if (selectedType === 'deposit') {
                 suggestCategoryButton.style.display = 'none';
+                balancePreviewContainer.classList.remove('hidden');
+                balancePreviewLabel.textContent = "Saldo Disponível para Guardar:";
+                balancePreviewValue.textContent = formatCurrency(parseFloat(compactBalance.textContent.replace('R$', '').replace('.', '').replace(',', '.')));
+            } else if (selectedType === 'withdraw') {
+                 suggestCategoryButton.style.display = 'none';
+                 // A prévia para resgate será mostrada quando uma caixinha for selecionada
+                 balancePreviewContainer.classList.add('hidden');
             } else {
                 suggestCategoryButton.style.display = 'inline-flex';
+                balancePreviewContainer.classList.add('hidden');
             }
 
             transactionAmountInput.focus();
@@ -1391,7 +1423,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         transactionDateInput.valueAsDate = new Date(); // Define data padrão
         
         if (transaction) {
-            transactionIdInput.value = transaction.id;
+            transactionIdInput.value = transaction.id || ''; // Garante que não seja null ou undefined
             transactionAmountInput.value = (parseFloat(transaction.amount) * 100).toFixed(0);
             formatCurrencyInput(transactionAmountInput);
             transactionDescriptionInput.value = transaction.description;
@@ -1513,6 +1545,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         await saveTransaction(newTransaction, installments);
         showToast("Transação salva com sucesso!", "success");
         closeTransactionModal();
+
+        // **NOVA LÓGICA:** Após salvar, verifica se há mais sugestões na fila da IA
+        if (aiSuggestedExpensesQueue.length > 0) {
+            processNextAISuggestion();
+        }
     });
 
     // Lida com cliques nos botões de editar/excluir transações (delegação de eventos)
@@ -1606,6 +1643,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         formatCurrencyInput(transactionAmountInput);
     });
 
+    // NOVO: Listener para mostrar prévia de saldo ao selecionar uma caixinha para resgate
+    transactionCategorySelect.addEventListener('change', () => {
+        const selectedType = document.querySelector('input[name="transaction-type"]:checked').value;
+        if (selectedType === 'withdraw') {
+            const categoryId = transactionCategorySelect.value;
+            const caixinha = categories.find(c => c.id === categoryId);
+            if (caixinha) {
+                balancePreviewContainer.classList.remove('hidden');
+                balancePreviewLabel.textContent = `Saldo em "${caixinha.name}":`;
+                balancePreviewValue.textContent = formatCurrency(caixinha.savedAmount || 0);
+            } else {
+                balancePreviewContainer.classList.add('hidden');
+            }
+        }
+    });
+
+
     // --- Funções de Navegação por Mês ---
     function updateMonthDisplay() {
         currentMonthDisplay.textContent = formatMonthDisplay(currentMonth);
@@ -1669,7 +1723,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const currentMonthYYYYMM = getCurrentMonthYYYYMM(currentMonth); // Usa currentMonth
         const currentMonthBudgets = budgets.filter(b => b.month === currentMonthYYYYMM);
         if (currentMonthBudgets.length === 0) {
-            budgetListContainer.innerHTML = '<p class="text-center text-gray-500 py-4 col-span-full">Nenhum orçamento configurado para este mês.</p>';
+            noBudgetsMessage.classList.remove('hidden');
+            budgetListContainer.innerHTML = ''; // Garante que a lista esteja vazia
             return;
         }
         noBudgetsMessage.classList.add('hidden'); // Esconde a mensagem se houver orçamentos
@@ -2592,6 +2647,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     
     function renderChart() {
+        // Esconde a legenda e o total se não for o gráfico de pizza
+        const legendContainer = document.getElementById('chart-legend-container');
+        if (currentChartType !== 'pie') {
+            legendContainer.classList.add('hidden');
+        } else {
+            legendContainer.classList.remove('hidden');
+        }
+
         switch (currentChartType) {
             case 'pie':
                 renderExpensePieChart();
@@ -2610,6 +2673,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     function renderExpensePieChart() {
         const ctx = document.getElementById('expense-chart').getContext('2d');
+        const legendDiv = document.getElementById('chart-legend');
+        const totalAmountSpan = document.getElementById('chart-total-amount');
+        const centerTextDiv = document.getElementById('chart-center-text');
+
+        legendDiv.innerHTML = '';
+        totalAmountSpan.textContent = formatCurrency(0);
+        centerTextDiv.innerHTML = '';
+
         const expensesByCategory = transactions
             .filter(t => t.type === 'expense' && t.date.startsWith(getCurrentMonthYYYYMM(chartMonth)) && (t.status === 'Pago' || t.status === 'Recebido' || t.status === 'Confirmado'))
             .reduce((acc, t) => {
@@ -2623,9 +2694,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return acc;
             }, {});
 
-        const labels = Object.keys(expensesByCategory);
-        const data = labels.map(label => expensesByCategory[label].total);
-        const backgroundColors = labels.map(label => expensesByCategory[label].color);
+        const sortedExpenses = Object.entries(expensesByCategory).sort(([, a], [, b]) => b.total - a.total);
+        const totalExpenses = sortedExpenses.reduce((sum, [, data]) => sum + data.total, 0);
+
+        const labels = sortedExpenses.map(([name]) => name);
+        const data = sortedExpenses.map(([, data]) => data.total);
+        const backgroundColors = sortedExpenses.map(([, data]) => data.color);
 
         if (expenseChartInstance) {
             expenseChartInstance.destroy();
@@ -2638,11 +2712,42 @@ document.addEventListener('DOMContentLoaded', async () => {
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             ctx.fillText('Sem despesas pagas para exibir neste mês.', ctx.canvas.width / 2, ctx.canvas.height / 2);
+            legendDiv.innerHTML = '<p class="text-center text-gray-500">Sem dados para a legenda.</p>';
+            totalAmountSpan.textContent = formatCurrency(0);
             return;
         }
 
+        // Preenche a legenda customizada
+        sortedExpenses.forEach(([name, catData]) => {
+            const percentage = totalExpenses > 0 ? (catData.total / totalExpenses * 100).toFixed(2) : 0;
+            const legendItem = document.createElement('div');
+            legendItem.className = 'chart-legend-item';
+            legendItem.innerHTML = `
+                <div class="flex items-center">
+                    <span class="w-3 h-3 rounded-full mr-3" style="background-color: ${catData.color};"></span>
+                    <span class="flex-grow text-sm text-gray-700">${name}</span>
+                </div>
+                <div class="text-right">
+                    <span class="font-semibold text-sm">${formatCurrency(catData.total)}</span>
+                    <span class="text-xs text-gray-500 w-16 inline-block text-right">${percentage.replace('.', ',')}%</span>
+                </div>
+            `;
+            legendDiv.appendChild(legendItem);
+        });
+
+        // Atualiza o total
+        totalAmountSpan.textContent = formatCurrency(totalExpenses);
+
+        // Atualiza o texto central com a maior despesa
+        const largestExpense = sortedExpenses[0];
+        const largestExpensePercentage = totalExpenses > 0 ? (largestExpense[1].total / totalExpenses * 100).toFixed(2) : 0;
+        centerTextDiv.innerHTML = `
+            <div class="text-xl font-bold text-red-500">${largestExpensePercentage.replace('.', ',')}%</div>
+            <div class="text-sm text-gray-600">${largestExpense[0]}</div>
+        `;
+
         expenseChartInstance = new Chart(ctx, {
-            type: 'pie',
+            type: 'doughnut',
             data: {
                 labels: labels,
                 datasets: [{
@@ -2650,18 +2755,20 @@ document.addEventListener('DOMContentLoaded', async () => {
                     data: data,
                     backgroundColor: backgroundColors,
                     borderColor: '#fff',
-                    borderWidth: 2
+                    borderWidth: 2,
+                    hoverBorderWidth: 4
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                cutout: '70%', // Cria o efeito de "rosca"
                 plugins: {
-                    legend: { position: 'bottom' },
+                    legend: {
+                        display: false // Desativa a legenda padrão do Chart.js
+                    },
                     tooltip: {
-                        callbacks: {
-                            label: (context) => `${context.label || ''}: ${formatCurrency(context.parsed)}`
-                        }
+                        enabled: false // Desativa o tooltip padrão para usar a legenda customizada
                     }
                 }
             }
@@ -2670,6 +2777,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function renderIncomeVsExpenseBarChart() {
         const ctx = document.getElementById('expense-chart').getContext('2d');
+        document.getElementById('chart-center-text').innerHTML = ''; // Limpa o texto central
         const monthFilter = getCurrentMonthYYYYMM(chartMonth);
 
         const totalIncome = transactions
@@ -2727,6 +2835,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     function renderBalanceEvolutionLineChart() {
         const ctx = document.getElementById('expense-chart').getContext('2d');
+        document.getElementById('chart-center-text').innerHTML = ''; // Limpa o texto central
         const balances = [];
         const labels = [];
         let cumulativeBalance = 0;
@@ -3097,6 +3206,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 throw new Error("Resposta da IA inválida ao otimizar categorias.");
             }
             const suggestions = JSON.parse(result.candidates[0].content.parts[0].text);
+            categoryOptimizationSuggestionsStore = suggestions; // Armazena as sugestões
             renderCategoryOptimizationSuggestions(suggestions);
         } catch (error) {
             console.error("Erro ao otimizar categorias:", error);
@@ -3146,7 +3256,128 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     optimizeCategoriesButton.addEventListener('click', openCategoryOptimizationModal);
     closeCategoryOptimizationModalButton.addEventListener('click', closeCategoryOptimizationModal);
-    closeCategoryOptimizationButton.addEventListener('click', closeCategoryOptimizationModal);
+    // Este botão não existe mais com este ID, removendo a referência para evitar erros.
+    // closeCategoryOptimizationButton.addEventListener('click', closeCategoryOptimizationModal);
+
+    // Delegação de eventos para as ações de otimização de categoria
+    categoryOptimizationSuggestions.addEventListener('click', async (e) => {
+        const button = e.target.closest('button');
+        if (!button) return;
+
+        const action = button.dataset.action;
+        const index = parseInt(button.dataset.index, 10);
+        const suggestion = categoryOptimizationSuggestionsStore[index];
+        const card = button.closest('.suggestion-card');
+
+        if (action === 'ignore') {
+            card.remove(); // Simplesmente remove a sugestão da UI
+            return;
+        }
+
+        if (action === 'confirm') {
+            try {
+                switch (suggestion.type) {
+                    case 'merge':
+                        await handleMergeSuggestion(suggestion);
+                        break;
+                    case 'rename':
+                        await handleRenameSuggestion(suggestion);
+                        break;
+                    case 'delete':
+                        await handleDeleteSuggestion(suggestion);
+                        break;
+                }
+                card.remove(); // Remove o card após a ação ser bem-sucedida
+                // Verifica se não há mais sugestões
+                if (categoryOptimizationSuggestions.childElementCount === 0) {
+                    categoryOptimizationSuggestions.innerHTML = '<p class="text-center text-green-600 font-semibold py-4">Todas as sugestões foram aplicadas!</p>';
+                }
+            } catch (error) {
+                console.error(`Erro ao aplicar sugestão de ${suggestion.type}:`, error);
+                showToast(`Falha ao aplicar sugestão: ${error.message}`, 'error');
+            }
+        }
+    });
+
+    async function handleMergeSuggestion(suggestion) {
+        // Encontra as categorias a serem mescladas
+        const categoriesToMerge = categories.filter(c => suggestion.from.includes(c.name));
+        if (categoriesToMerge.length === 0) {
+            throw new Error("Categorias para mesclar não encontradas.");
+        }
+    
+        // Pega o tipo e a prioridade da primeira categoria como base (pode ser refinado se necessário)
+        const baseCategory = categoriesToMerge[0];
+    
+        // Cria a nova categoria
+        const newCategory = {
+            id: generateUUID(),
+            name: suggestion.to,
+            type: baseCategory.type,
+            priority: baseCategory.priority,
+            color: getNextAvailableColor(baseCategory.type, baseCategory.priority),
+            savedAmount: 0, // Zera para caixinhas, se aplicável
+            targetAmount: 0
+        };
+        categories.push(newCategory);
+    
+        // Atualiza as transações
+        const idsToMerge = categoriesToMerge.map(c => c.id);
+        transactions.forEach(t => {
+            if (idsToMerge.includes(t.categoryId)) {
+                t.categoryId = newCategory.id;
+            }
+        });
+    
+        // Remove as categorias antigas
+        categories = categories.filter(c => !idsToMerge.includes(c.id));
+    
+        await saveCategories();
+        await saveAllTransactionsInBatch(); // Salva todas as transações modificadas de uma vez
+        showToast(`Categorias mescladas em "${suggestion.to}"!`, 'success');
+    }
+    
+    async function handleRenameSuggestion(suggestion) {
+        const categoryToRename = categories.find(c => c.name === suggestion.from);
+        if (!categoryToRename) {
+            throw new Error(`Categoria "${suggestion.from}" não encontrada para renomear.`);
+        }
+        categoryToRename.name = suggestion.to;
+        await saveCategories();
+        showToast(`Categoria renomeada para "${suggestion.to}"!`, 'success');
+    }
+    
+    async function handleDeleteSuggestion(suggestion) {
+        const categoryToDelete = categories.find(c => c.name === suggestion.from);
+        if (!categoryToDelete) {
+            throw new Error(`Categoria "${suggestion.from}" não encontrada para apagar.`);
+        }
+    
+        // A lógica da IA já deve ter garantido que não há transações.
+        categories = categories.filter(c => c.id !== categoryToDelete.id);
+        await saveCategories();
+        showToast(`Categoria "${suggestion.from}" apagada!`, 'success');
+    }
+
+    async function saveAllTransactionsInBatch() {
+        if (!isAuthReady || !userId) { return; }
+        try {
+            const batch = writeBatch(db);
+            const transactionsColRef = getUserCollectionRef('transactions');
+            if (!transactionsColRef) return;
+    
+            transactions.forEach(t => {
+                const docRef = doc(transactionsColRef, t.id);
+                batch.set(docRef, t, { merge: true });
+            });
+    
+            await batch.commit();
+            console.log("Lote de transações atualizado com sucesso!");
+        } catch (error) {
+            console.error("Erro ao salvar lote de transações:", error);
+            showToast("Erro ao atualizar transações após mesclagem.", 'error');
+        }
+    }
 
     // Event listener para o botão "Continuar" da tela de Splash
     continueToAppButton.addEventListener('click', () => {
@@ -3155,10 +3386,175 @@ document.addEventListener('DOMContentLoaded', async () => {
         showPage('dashboard');
     });
 
+    // --- NOVO: Funções de Análise de Despesas com IA ---
+    function openExpenseParserModal() {
+        expenseParserModal.classList.add('active');
+        expenseParserInput.value = ''; // Limpa a área de texto
+    }
+
+    function closeExpenseParserModal() {
+        expenseParserModal.classList.remove('active');
+    }
+
+    // NOVA FUNÇÃO: Processa o próximo item na fila de sugestões da IA
+    async function processNextAISuggestion() {
+        if (aiSuggestedExpensesQueue.length === 0) {
+            showToast("Todas as despesas sugeridas foram processadas.", "success");
+            return;
+        }
+    
+        const expense = aiSuggestedExpensesQueue.shift(); // Pega o primeiro item e o remove da fila
+        let categoryIdToSelect = null;
+    
+        // 1. Verifica se a categoria sugerida já existe.
+        const existingCategory = categories.find(c =>
+            c.name.toLowerCase() === expense.suggestedCategoryName.toLowerCase() && c.type === 'expense'
+        );
+    
+        if (existingCategory) {
+            categoryIdToSelect = existingCategory.id;
+        } else {
+            // 2. Se a categoria não existe, pergunta se o usuário quer criá-la.
+            const userWantsToCreate = await new Promise(resolve => {
+                showConfirmationModal(
+                    "Nova Categoria Sugerida",
+                    `A IA sugeriu uma nova categoria: "${expense.suggestedCategoryName}". Deseja criá-la?`,
+                    () => resolve(true),  // Callback de sucesso
+                    () => resolve(false) // Callback de cancelamento
+                );
+            });
+    
+            if (userWantsToCreate) {
+                // Cria a nova categoria
+                const newCategory = {
+                    id: generateUUID(),
+                    name: expense.suggestedCategoryName,
+                    type: 'expense', // Assume despesa para este fluxo
+                    priority: 'non-essential', // Padrão, o usuário pode editar depois
+                    color: getNextAvailableColor('expense', 'non-essential')
+                };
+                categories.push(newCategory);
+                await saveCategories();
+                showToast(`Categoria "${newCategory.name}" criada!`, "success");
+                categoryIdToSelect = newCategory.id;
+            } else {
+                // Se o usuário não quer criar, o campo de categoria ficará em branco
+                showToast("Criação de categoria cancelada. Por favor, selecione uma manualmente.", "info");
+            }
+        }
+    
+        // 3. Abre o modal de transação, agora com o categoryId (se aplicável)
+        openTransactionModal({
+            type: 'expense',
+            description: expense.description,
+            amount: expense.amount,
+            date: new Date().toISOString().split('T')[0],
+            status: 'Pendente',
+            categoryId: categoryIdToSelect // Passa o ID da categoria
+        });
+        // A continuação do fluxo ocorrerá após o salvamento da transação (submit do form)
+    }
+
+    async function parseExpensesWithAI(event) {
+        event.preventDefault();
+        const textToParse = expenseParserInput.value.trim();
+        if (!textToParse) {
+            showToast("Por favor, cole sua lista de despesas.", "info");
+            return;
+        }
+
+        const validKeys = geminiApiKeys.filter((key) => key && key.trim() !== "");
+        if (!isGeminiApiReady || validKeys.length === 0) {
+            showToast("O assistente de IA não está configurado.", "error");
+            return;
+        }
+
+        const button = analyzeExpensesButton;
+        const buttonText = button.querySelector('span');
+        const buttonIcon = button.querySelector('i');
+        
+        button.disabled = true;
+        buttonText.textContent = 'Analisando...';
+        buttonIcon.className = 'fa-solid fa-spinner animate-spin mr-2';
+
+        const currentMonthTransactions = transactions.filter(t => t.date.startsWith(getCurrentMonthYYYYMM(currentMonth)));
+        
+        const existingExpenseCategories = categories
+            .filter(c => c.type === 'expense')
+            .map(c => ({ name: c.name, priority: c.priority }));
+
+        const prompt = `
+            Você é um assistente financeiro especialista em extrair e categorizar dados.
+            Sua tarefa é analisar a lista de despesas fornecida pelo usuário, compará-la com as transações já existentes e, para cada despesa NOVA, sugerir a categoria mais apropriada.
+
+            ESTRUTURA DA RESPOSTA (OBRIGATÓRIO):
+            Responda APENAS com um array de objetos JSON. Cada objeto deve ter os seguintes campos:
+            {
+              "description": "string",
+              "amount": number,
+              "suggestedCategoryName": "string"
+            }
+            Se nenhuma nova despesa for encontrada, retorne um array vazio []. Não inclua \`\`\`json ou qualquer outro texto.
+
+            REGRAS CRÍTICAS DE PROCESSAMENTO:
+            1.  **Extração de Dados:** De cada linha do texto do usuário, extraia a descrição ('description') e o valor ('amount'). O valor deve ser um número (float), sem símbolos de moeda.
+            2.  **Verificação de Duplicatas:** Compare CUIDADOSAMENTE cada despesa extraída com a lista de 'transacoes_existentes'. Se uma despesa com descrição e valor muito similares já existir, **IGNORE-A** e não a inclua no resultado.
+            3.  **Sugestão de Categoria:** Para cada despesa NOVA, analise a 'description' e compare-a com a lista de 'categorias_existentes'.
+                - Se a descrição se encaixa bem em uma categoria existente, use o nome exato dessa categoria em 'suggestedCategoryName'.
+                - Se nenhuma categoria existente se encaixar bem, crie um nome de categoria novo, claro e conciso, para 'suggestedCategoryName'.
+            
+            ---
+            DADOS FORNECIDOS PARA ANÁLISE:
+            
+            1.  LISTA DE DESPESAS DO USUÁRIO:
+            ${textToParse}
+
+            2.  TRANSAÇÕES JÁ EXISTENTES NO MÊS (PARA EVITAR DUPLICATAS):
+            ${JSON.stringify(currentMonthTransactions.map(t => ({description: t.description, amount: t.amount})))}
+
+            3.  CATEGORIAS DE DESPESA JÁ EXISTENTES (PARA SUGESTÃO):
+            ${JSON.stringify(existingExpenseCategories)}
+            ---
+        `;
+
+        const payload = {
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+                response_mime_type: "application/json",
+            },
+        };
+
+        try {
+            const result = await tryNextApiKey(payload, currentGeminiApiKeyIndex);
+            if (!result.candidates || !result.candidates[0].content.parts[0].text) {
+                throw new Error("Resposta da IA inválida ao analisar despesas.");
+            }
+            const newExpenses = JSON.parse(result.candidates[0].content.parts[0].text);
+            
+            closeExpenseParserModal();
+
+            if (newExpenses.length === 0) {
+                showToast("Nenhuma despesa nova encontrada para adicionar.", "info");
+                return;
+            }
+
+            // Coloca as sugestões na fila e inicia o processamento
+            aiSuggestedExpensesQueue = newExpenses;
+            processNextAISuggestion();
+
+        } catch (error) {
+            console.error("Erro ao analisar despesas com IA:", error);
+            showToast("Erro ao processar a lista. Verifique o formato e tente novamente.", "error");
+        } finally {
+            button.disabled = false;
+            buttonText.textContent = 'Analisar com IA';
+            buttonIcon.className = 'fa-solid fa-brain mr-2';
+        }
+    }
+
+
+    expenseParserButton.addEventListener('click', openExpenseParserModal);
+    closeExpenseParserModalButton.addEventListener('click', closeExpenseParserModal);
+    expenseParserForm.addEventListener('submit', parseExpensesWithAI);
+
 });
-
-    
-
-    
-
-    

@@ -150,6 +150,10 @@ h1, h2, h3, h4, h5, h6 {
     z-index: 1002;
 }
 
+#expense-parser-modal {
+    z-index: 1003;
+}
+
 
 .close-button {
     color: #aaa;
@@ -227,6 +231,27 @@ h1, h2, h3, h4, h5, h6 {
     flex-direction: column;
     height: 100%; /* Garante que o contêiner da etapa ocupe a altura total */
 }
+
+/* NOVO: Estilo para o botão de análise com IA */
+.step-1-type-button-ai {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    background-color: #4b5563; /* bg-gray-600 */
+    color: white;
+    border: 1px solid #4b5563; /* border-gray-600 */
+    border-radius: 0.75rem; /* rounded-lg */
+    padding: 1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+.step-1-type-button-ai:hover {
+    background-color: #374151; /* hover:bg-gray-700 */
+    transform: translateY(-2px);
+}
+
 
 /* Estilo para listas geradas pela IA */
 #chat-messages ul, #insights-content ul, #budget-optimization-content ul {
@@ -547,4 +572,48 @@ body.chat-active main {
     padding-right: 2.5rem;
 }
 
-    
+/* NOVO: Estilos para os textos da lista de transações */
+.transaction-item-title {
+    font-size: 0.95rem; /* Um pouco menor que o normal */
+    font-weight: 500; /* Medium */
+    color: #1f2937; /* text-gray-800 */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.transaction-item-status {
+    font-size: 0.7rem; /* bem pequeno */
+    color: #6b7280; /* text-gray-500 */
+}
+.transaction-item-description {
+    font-size: 0.8rem; /* Menor */
+    color: #6b7280; /* text-gray-500 */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.transaction-item-amount {
+    font-size: 1rem; /* Um pouco menor que o text-lg anterior */
+    font-weight: 700; /* Bold */
+}
+.transaction-item-installment {
+    font-size: 0.75rem;
+    color: #6b7280;
+    margin-left: 4px;
+}
+
+/* NOVOS Estilos para o Gráfico de Rosca */
+#chart-center-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    pointer-events: none;
+}
+.chart-legend-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 0;
+}
