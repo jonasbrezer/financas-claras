@@ -84,15 +84,20 @@ h1, h2, h3, h4, h5, h6 {
 /* Estilo para a bolinha de status na linha do tempo da transação */
 .transaction-bullet {
     position: absolute;
-    left: -31.2px; /* Ajustado para puxar o texto para a esquerda */
+    left: -27px; /* Ajustado para nova posição */
     top: 50%;
     transform: translateY(-50%);
-    width: 24px; /* Tamanho da bolinha (w-6) */
-    height: 24px; /* Tamanho da bolinha (h-6) */
+    width: 20px; /* Tamanho da bolinha (w-5) */
+    height: 20px; /* Tamanho da bolinha (h-5) */
     border-radius: 50%;
     z-index: 10;
-    box-sizing: border-box; /* Garante que o preenchimento não interfere com o contorno para bolinhas vazias */
-    background-color: var(--color-blue-light); /* Mesma cor do body */
+    box-sizing: border-box;
+    background-color: var(--color-blue-light);
+    cursor: pointer; /* Adiciona o cursor de clique */
+    transition: transform 0.2s;
+}
+.transaction-bullet:hover {
+    transform: translateY(-50%) scale(1.1); /* Efeito de hover */
 }
 /* Para transações pagas, a cor preenche a bolinha */
 .transaction-bullet.paid {
@@ -100,13 +105,12 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .timeline-bullet-date {
-    left: 1.25rem; /* Centraliza com a linha da timeline */
-    position: absolute; /* Garantir que seja posicionado */
-    left: 1px; /* Ajustado para alinhar com o centro da linha do tempo */
-    top: 0; /* Alinha com o topo do bloco de data */
-    width: 26px;
-    height: 26px;
-    background-color: #CBD5E1; /* Cor de fundo para o ícone da data */
+    position: absolute;
+    left: 2px; /* Ajustado para alinhar com o centro da linha do tempo */
+    top: 0;
+    width: 22px; /* Reduzido de 26px */
+    height: 22px; /* Reduzido de 26px */
+    background-color: #CBD5E1;
     border-radius: 50%;
     display: flex;
     align-items: center;
@@ -574,30 +578,30 @@ body.chat-active main {
 
 /* NOVO: Estilos para os textos da lista de transações */
 .transaction-item-title {
-    font-size: 0.95rem; /* Um pouco menor que o normal */
-    font-weight: 500; /* Medium */
-    color: #1f2937; /* text-gray-800 */
+    font-size: 0.9rem; /* Ajustado */
+    font-weight: 500;
+    color: #1f2937;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 .transaction-item-status {
-    font-size: 0.7rem; /* bem pequeno */
-    color: #6b7280; /* text-gray-500 */
+    font-size: 0.7rem;
+    color: #6b7280;
 }
 .transaction-item-description {
-    font-size: 0.8rem; /* Menor */
-    color: #6b7280; /* text-gray-500 */
+    font-size: 0.8rem;
+    color: #6b7280;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 .transaction-item-amount {
-    font-size: 1rem; /* Um pouco menor que o text-lg anterior */
-    font-weight: 700; /* Bold */
+    font-size: 0.95rem; /* Ajustado */
+    font-weight: 700;
 }
 .transaction-item-installment {
-    font-size: 0.75rem;
+    font-size: 0.7rem; /* Ajustado */
     color: #6b7280;
     margin-left: 4px;
 }
@@ -617,3 +621,7 @@ body.chat-active main {
     align-items: center;
     padding: 4px 0;
 }
+
+    
+
+      

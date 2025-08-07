@@ -225,6 +225,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 
     // Elementos do Chat
+    const chatContainer = document.getElementById('chat-container'); // Container principal do chat
     const chatMessagesDiv = document.getElementById('chat-messages');
     const chatInput = document.getElementById('chat-input');
     const sendButton = document.getElementById('chat-send-button'); 
@@ -232,7 +233,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const refreshChatDataButton = document.getElementById('refresh-chat-data-button');
     const clearChatButton = document.getElementById('clear-chat-button');
     const activeApiKeyIndicator = document.getElementById('active-api-key-indicator');
-    const chatBackButton = document.getElementById('chat-back-button'); // NOVO: Botão Voltar
+    const chatBackButton = document.getElementById('chat-back-button');
 
     // Elementos das Categorias
     const addCategoryButton = document.getElementById('add-new-category-button');
@@ -751,7 +752,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         let totalGlobalIncome = 0;
         let totalGlobalPaidExpenses = 0;
         let totalPaidExpensesThisMonth = 0;
-        let totalPendingExpensesThisMonth = 0; // CORRIGIDO: Agora é específico para o mês
+        let totalPendingExpensesThisMonth = 0;
     
         const currentMonthYYYYMM = getCurrentMonthYYYYMM(currentMonth);
     
@@ -1051,19 +1052,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Lida com cliques nos botões de editar/excluir categorias (delegação de eventos)
     categoryListContainer.addEventListener('click', (e) => {
         const target = e.target;
-        // Lógica para o menu de 3 pontos
-        const menuButton = target.closest('.action-menu-button');
-        if (menuButton) {
-            e.stopPropagation(); 
-            const dropdown = menuButton.nextElementSibling;
-            document.querySelectorAll('.action-menu-dropdown').forEach(openDropdown => {
-                if (openDropdown !== dropdown) {
-                    openDropdown.classList.add('hidden');
-                }
-            });
-            dropdown.classList.toggle('hidden');
-            return;
-        }
 
         const editButton = target.closest('.edit-category-button');
         if (editButton) {
@@ -1223,9 +1211,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             dateGroupDiv.innerHTML = `
                 <div class="timeline-bullet-date">
-                    <i class="fa-solid fa-calendar-days text-sm"></i>
+                    <i class="fa-solid fa-calendar-days text-xs"></i>
                 </div>
-                <h3 class="text-xl font-semibold mb-3 ml-2">${formattedDate}</h3>
+                <h3 class="text-lg font-semibold mb-3 ml-2">${formattedDate}</h3>
                 <div class="space-y-3"></div>
             `;
             const transactionsForDateDiv = dateGroupDiv.querySelector('.space-y-3');
@@ -1275,7 +1263,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 
                 const isPaidOrReceived = (transaction.status === 'Pago' || transaction.status === 'Recebido' || transaction.status === 'Confirmado');
                 const bulletClass = isPaidOrReceived ? 'transaction-bullet paid' : 'transaction-bullet';
-                const bulletStyle = isPaidOrReceived ? `background-color: ${bulletColor};` : `border: 3px solid ${bulletColor};`;
+                const bulletStyle = isPaidOrReceived ? `background-color: ${bulletColor};` : `border: 2px solid ${bulletColor};`;
                 
                 const statusIndicatorText = transaction.status === 'Pendente' ? 'Pendente' : 
                                             (transaction.type === 'income' && transaction.status === 'Recebido' ? 'Recebido' : 
@@ -1289,7 +1277,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const transactionItem = document.createElement('div');
                 transactionItem.className = `bg-white p-4 rounded-lg shadow-sm flex justify-between items-center relative pl-8`; 
                 transactionItem.innerHTML = `
-                    <div class="${bulletClass}" style="${bulletStyle}"></div>
+                    <div class="${bulletClass}" style="${bulletStyle}" data-id="${transaction.id}"></div>
                     <div class="flex-grow min-w-0">
                         <p class="transaction-item-title">${transactionTypeDisplay} ${installmentInfo}</p>
                         ${statusIndicatorHtml}
@@ -1570,24 +1558,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    // Lida com cliques nos botões de editar/excluir transações (delegação de eventos)
-    transactionsListContainer.addEventListener('click', (e) => {
+    // Lida com cliques nos botões de editar/excluir/status (delegação de eventos)
+    transactionsListContainer.addEventListener('click', async (e) => {
         const target = e.target;
-    
-        // Lógica para o menu de 3 pontos
-        const menuButton = target.closest('.action-menu-button');
-        if (menuButton) {
-            e.stopPropagation();
-            const dropdown = menuButton.nextElementSibling;
-            // Fecha outros menus abertos
-            document.querySelectorAll('.action-menu-dropdown').forEach(openDropdown => {
-                if (openDropdown !== dropdown) {
-                    openDropdown.classList.add('hidden');
-                }
-            });
-            dropdown.classList.toggle('hidden');
-            return;
-        }
     
         // Lógica para o botão de editar
         const editButton = target.closest('.edit-transaction-button');
@@ -1597,7 +1570,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (transactionToEdit) {
                 openTransactionModal(transactionToEdit);
             }
-            return; // Encerra a execução para evitar outros gatilhos
+            return;
         }
     
         // Lógica para o botão de apagar
@@ -1652,6 +1625,28 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             );
             return;
+        }
+
+        // Lógica para clicar na bolinha de status
+        if (target.matches('.transaction-bullet')) {
+            const id = target.dataset.id;
+            const transaction = transactions.find(t => t.id === id);
+            
+            if (!transaction || transaction.type === 'caixinha') {
+                return; // Não faz nada para caixinhas ou se não encontrar a transação
+            }
+
+            // Alterna o status
+            if (transaction.type === 'expense') {
+                transaction.status = (transaction.status === 'Pago') ? 'Pendente' : 'Pago';
+            } else if (transaction.type === 'income') {
+                transaction.status = (transaction.status === 'Recebido') ? 'Pendente' : 'Recebido';
+            }
+
+            // Salva a transação atualizada no Firestore
+            await saveTransaction(transaction);
+            // O onSnapshot cuidará de re-renderizar, mas pode ser útil para feedback imediato
+            // renderTransactions();
         }
     });
 
@@ -2030,10 +2025,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 - <strong>Despesa Pendente:</strong> Uma conta ainda não paga. Verifique a data dela contra a "data de hoje" para ver se está atrasada.
 ---`;
 
+        // Busca os dados mais recentes antes de enviar a mensagem
         const currentFinancialData = getFinancialDataForAI();
+        const userPromptWithData = `DADOS FINANCEIROS COMPLETOS DO USUÁRIO:\n${currentFinancialData}\n\nMENSAGEM DO USUÁRIO:\n${userMessage}`;
 
         const contentsPayload = [...chatHistory];
-        const userPromptWithData = `DADOS FINANCEIROS COMPLETOS DO USUÁRIO:\n${currentFinancialData}\n\nMENSAGEM DO USUÁRIO:\n${userMessage}`;
         contentsPayload.push({ role: "user", parts: [{ text: userPromptWithData }] });
         
         const payload = {
@@ -2386,18 +2382,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     // Event listener para o novo botão de atualizar dados do chat
     if (refreshChatDataButton) {
-        refreshChatDataButton.addEventListener('click', () => {
+        refreshChatDataButton.addEventListener('click', (e) => {
+            e.preventDefault();
             chatHistory = []; 
             // Força a IA a pegar novos dados na próxima mensagem.
             sendChatMessage("Por favor, atualize os meus dados financeiros.");
+            // Esconde o menu dropdown
+            e.target.closest('.action-menu-dropdown').classList.add('hidden');
         });
     }
     
     if (clearChatButton) {
-        clearChatButton.addEventListener('click', () => {
+        clearChatButton.addEventListener('click', (e) => {
+            e.preventDefault();
             chatMessagesDiv.innerHTML = '';
             chatHistory = []; // Limpa o histórico da sessão
             appendMessage('ai', 'Chat limpo. Como posso ajudar a começar de novo?', 'info');
+             // Esconde o menu dropdown
+            e.target.closest('.action-menu-dropdown').classList.add('hidden');
         });
     }
 
@@ -2704,14 +2706,33 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderFilterPills(); // Chama a função para criar os filtros iniciais
 
 
-    // Fecha dropdowns de ação ao clicar fora
+    // ABRIR/FECHAR MENUS DE AÇÃO (3 PONTOS)
     document.addEventListener('click', (e) => {
-        if (!e.target.closest('.action-menu-button')) {
+        const menuButton = e.target.closest('.action-menu-button');
+
+        // Se o clique foi EM UM botão de menu
+        if (menuButton) {
+            e.stopPropagation();
+            const dropdown = menuButton.nextElementSibling;
+            
+            // Fecha todos os outros dropdowns abertos antes de abrir o novo
+            document.querySelectorAll('.action-menu-dropdown').forEach(openDropdown => {
+                if (openDropdown !== dropdown) {
+                    openDropdown.classList.add('hidden');
+                }
+            });
+            // Alterna a visibilidade do dropdown clicado
+            dropdown.classList.toggle('hidden');
+        } else {
+            // Se o clique foi FORA de qualquer botão de menu, fecha todos os dropdowns
             document.querySelectorAll('.action-menu-dropdown').forEach(dropdown => {
-                dropdown.classList.add('hidden');
+                if(dropdown) {
+                    dropdown.classList.add('hidden');
+                }
             });
         }
     });
+
 
 
     // --- Funções de Gráfico (REESTRUTURADO) ---
@@ -3633,3 +3654,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 });
 
+    
+
+      
