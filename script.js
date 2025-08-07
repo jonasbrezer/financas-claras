@@ -756,7 +756,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         let totalGlobalIncome = 0;
         let totalGlobalPaidExpenses = 0;
         let totalPaidExpensesThisMonth = 0;
-        let totalPendingExpensesThisMonth = 0;
+        let totalPendingThisMonth = 0; // Nome alterado para clareza
 
         const currentMonthYYYYMM = getCurrentMonthYYYYMM(currentMonth);
 
@@ -782,8 +782,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         transactions.forEach(t => {
             const transactionMonth = t.date.substring(0, 7);
             if (transactionMonth === currentMonthYYYYMM) {
-                if (t.status === 'Pendente') { // Aplica-se a receitas e despesas
-                    totalPendingExpensesThisMonth += parseFloat(t.amount);
+                // Soma aqui tanto receitas quanto despesas pendentes
+                if (t.status === 'Pendente') { 
+                    totalPendingThisMonth += parseFloat(t.amount);
                 } else if (t.type === 'expense' && t.status === 'Pago') {
                     totalPaidExpensesThisMonth += parseFloat(t.amount);
                 }
@@ -798,12 +799,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Atualiza Dashboard
         if (dashboardCurrentBalance) dashboardCurrentBalance.textContent = formatCurrency(cumulativeBalance);
         if (dashboardPaidExpenses) dashboardPaidExpenses.textContent = formatCurrency(totalPaidExpensesThisMonth);
-        if (dashboardPendingExpenses) dashboardPendingExpenses.textContent = formatCurrency(totalPendingExpensesThisMonth);
+        if (dashboardPendingExpenses) dashboardPendingExpenses.textContent = formatCurrency(totalPendingThisMonth);
         if (dashboardTotalCaixinhasSaved) dashboardTotalCaixinhasSaved.textContent = formatCurrency(totalCaixinhasSaved);
 
         // Atualiza Cabeçalho Compacto na tela de Transações
         if (compactBalance) compactBalance.textContent = formatCurrency(cumulativeBalance);
-        if (compactPending) compactPending.textContent = formatCurrency(totalPendingExpensesThisMonth);
+        if (compactPending) compactPending.textContent = formatCurrency(totalPendingThisMonth);
         if (compactSaved) compactSaved.textContent = formatCurrency(totalCaixinhasSaved);
     }
 
@@ -1072,28 +1073,28 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             showConfirmationModal(
                 "Confirmar Exclusão",
-                `Tem certeza que deseja excluir a categoria "${categoryToDelete.name}"? As transações associadas não serão mais consideradas nos orçamentos e os orçamentos para esta categoria serão apagados.`,
+                `Tem certeza que deseja excluir a categoria "${categoryToDelete.name}"? As transações associadas não serão deletadas, mas serão marcadas como "Desconhecidas". Orçamentos para esta categoria também serão apagados.`,
                 async () => {
-                    // Marca as transações como "desconhecidas", mas elas não serão mais usadas em cálculos de orçamento.
+                    // Marca as transações como "desconhecidas" para que não contem em futuros cálculos.
                     transactions.forEach(t => {
                         if (t.categoryId === id) {
-                            t.categoryId = 'unknown'; // Categoria 'unknown' é ignorada pela IA.
+                            t.categoryId = 'unknown'; 
                         }
                     });
                     
-                    // Apaga os orçamentos associados
+                    // Apaga os orçamentos associados a esta categoria.
                     budgets = budgets.filter(b => b.categoryId !== id);
 
-                    // Remove a categoria da lista
+                    // Remove a categoria da lista.
                     categories = categories.filter(cat => cat.id !== id);
 
-                    // Salva todas as mudanças
+                    // Salva todas as mudanças de uma vez para consistência.
                     await saveAllTransactionsInBatch();
                     await saveBudgets();
                     await saveCategories();
                     
                     showToast("Categoria deletada.", "info");
-                    // A UI será atualizada pelos listeners do onSnapshot
+                    // A UI será atualizada automaticamente pelos listeners do onSnapshot.
                 }
             );
         }
@@ -1773,7 +1774,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     t.categoryId === budget.categoryId && 
                     t.type === 'expense' && // Apenas despesas
                     t.date.startsWith(currentMonthYYYYMM) && // Filtra pelo mês atual
-                    (t.status === 'Pago' || t.status === 'Recebido' || t.status === 'Confirmado') // Apenas transações pagas/recebidas
+                    (t.status === 'Pago') // Apenas transações pagas
                 ).reduce((sum, t) => sum + parseFloat(t.amount), 0);
 
             const progress = budget.amount > 0 ? (totalSpent / budget.amount) * 100 : 0;
@@ -1902,13 +1903,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Função para obter dados financeiros formatados para a IA
     function getFinancialDataForAI() {
-        // --- PREPARAÇÃO DOS DADOS ---
         const categoryMap = categories.reduce((map, cat) => {
             map[cat.id] = cat.name;
             return map;
         }, {});
-    
-        const currentMonthYYYYMM = getCurrentMonthYYYYMM(new Date());
     
         // Calcula resumos financeiros com base nos dados GLOBAIS
         let totalGlobalIncome = 0;
@@ -1924,9 +1922,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
         const cumulativeBalance = totalGlobalIncome - totalGlobalPaidExpenses;
     
-        const totalPendingExpenses = transactions
-            .filter(t => t.type === 'expense' && t.status === 'Pendente' && t.categoryId !== 'unknown')
-            .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+        const pendingTransactions = transactions.filter(t => t.status === 'Pendente' && t.categoryId !== 'unknown');
+        const totalPending = pendingTransactions.reduce((sum, t) => sum + parseFloat(t.amount), 0);
+        const countPending = pendingTransactions.length;
     
         const totalCaixinhasSaved = categories
             .filter(cat => cat.type === 'caixinha')
@@ -1938,50 +1936,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 1. Resumo Financeiro (Dados Pré-calculados)
         dataString += "<strong>RESUMO FINANCEIRO (DADOS PRÉ-CALCULADOS):</strong>\n";
         dataString += `- Saldo Total Disponível (Global): ${formatCurrency(cumulativeBalance)}\n`;
-        dataString += `- Total de Despesas Pendentes (Geral): ${formatCurrency(totalPendingExpenses)}\n`;
+        dataString += `- Quantidade de Despesas Pendentes: ${countPending}\n`;
+        dataString += `- Valor Total de Despesas Pendentes: ${formatCurrency(totalPending)}\n`;
         dataString += `- Total Guardado em Caixinhas: ${formatCurrency(totalCaixinhasSaved)}\n\n`;
     
-        // 2. Lista de Transações Detalhada
-        dataString += "<strong>LISTA DETALHADA DE TRANSAÇÕES:</strong>\n";
-        if (transactions.length > 0) {
-            const formattedTransactions = transactions.map(t => {
+        // 2. Lista de Transações Pendentes (se houver)
+        if (countPending > 0) {
+            dataString += "<strong>LISTA DETALHADA DE TRANSAÇÕES PENDENTES:</strong>\n";
+            const formattedTransactions = pendingTransactions.map(t => {
                 const categoryName = categoryMap[t.categoryId] || 'Desconhecida';
-                if (t.categoryId === 'unknown') return null; // Ignora transações sem categoria
-                return `- Descrição: ${t.description}, Valor: ${formatCurrency(t.amount)}, Data: ${t.date}, Categoria: ${categoryName}, Status: ${t.status}, Tipo: ${t.type}`;
-            }).filter(Boolean).join('\n');
+                return `- Descrição: ${t.description}, Valor: ${formatCurrency(t.amount)}, Categoria: ${categoryName}`;
+            }).join('\n');
             dataString += formattedTransactions;
         } else {
-            dataString += "Nenhuma transação registrada.\n";
+            dataString += "Nenhuma transação pendente no momento.\n";
         }
     
-        // 3. Lista de Orçamentos
-        dataString += "\n\n<strong>LISTA DE ORÇAMENTOS DO MÊS ATUAL:</strong>\n";
-        const currentBudgets = budgets.filter(b => b.month === currentMonthYYYYMM);
-        if (currentBudgets.length > 0) {
-            const formattedBudgets = currentBudgets.map(b => {
-                const categoryName = categoryMap[b.categoryId];
-                if (!categoryName) return null;
-                const spent = transactions
-                    .filter(t => t.categoryId === b.categoryId && t.date.startsWith(currentMonthYYYYMM) && t.status === 'Pago' && t.categoryId !== 'unknown')
-                    .reduce((sum, t) => sum + parseFloat(t.amount), 0);
-                return `- Categoria: ${categoryName}, Orçamento: ${formatCurrency(b.amount)}, Gasto: ${formatCurrency(spent)}`;
-            }).filter(Boolean).join('\n');
-            dataString += formattedBudgets;
-        } else {
-            dataString += "Nenhum orçamento configurado para o mês atual.\n";
-        }
-    
-        // 4. Lista de Caixinhas
-        dataString += "\n\n<strong>LISTA DE CAIXINHAS (METAS DE POUPANÇA):</strong>\n";
-        const caixinhas = categories.filter(c => c.type === 'caixinha');
-        if (caixinhas.length > 0) {
-            const formattedCaixinhas = caixinhas.map(c => `- Nome: ${c.name}, Valor Guardado: ${formatCurrency(c.savedAmount || 0)}, Meta: ${formatCurrency(c.targetAmount || 0)}`).join('\n');
-            dataString += formattedCaixinhas;
-        } else {
-            dataString += "Nenhuma caixinha criada.\n";
-        }
-    
-        dataString += "\n--- Fim dos Dados Financeiros ---\n";
+        dataString += "\n\n--- Fim dos Dados Financeiros ---\n";
         return dataString;
     }
 
@@ -2013,19 +1984,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         const baseSystemInstruction = `Você é um assistente financeiro especialista. Sua função é analisar os dados fornecidos e responder às perguntas do usuário com base NESSES DADOS.
 
 <strong>REGRAS DE COMPORTAMENTO CRÍTICAS E INVIOLÁVEIS:</strong>
-1.  <strong>NÃO FAÇA CÁLCULOS:</strong> Você está **TERMINANTEMENTE PROIBIDO** de somar, subtrair ou realizar qualquer cálculo próprio com os valores das transações.
-2.  <strong>USE OS TOTAIS FORNECIDOS:</strong> Para responder sobre saldos, totais de despesas ou qualquer valor resumido, você **DEVE** usar os valores pré-calculados que estão na seção "RESUMO FINANCEIRO (DADOS PRÉ-CALCULADOS)". Ignore a lista de transações para fins de cálculo de totais.
-3.  <strong>SEJA UM APRESENTADOR DE DADOS:</strong> Sua principal função é apresentar os dados que foram fornecidos a você. Se o usuário perguntar o total de despesas pendentes, responda com o valor de "Total de Despesas Pendentes (Geral)" do resumo.
-4.  <strong>BASEADO EM DADOS, SEM ALARMISMO:</strong> Suas análises devem ser 100% baseadas nos dados. Não use linguagem alarmista como "situação crítica". Em vez disso, aponte os fatos. Ex: "Observei que o valor das suas despesas pendentes é maior que o seu saldo disponível."
-5.  <strong>NÃO PEÇA INFORMAÇÕES:</strong> Você já tem todos os dados. NUNCA peça ao usuário para registrar transações. Se uma informação não está na lista ou no resumo, diga que não a encontrou.
+1.  <strong>NÃO FAÇA CÁLCULOS NEM CONTAGENS:</strong> Você está **TERMINANTEMENTE PROIBIDO** de somar valores ou contar itens de listas.
+2.  <strong>USE OS TOTAIS FORNECIDOS:</strong> Para responder sobre saldos, totais ou quantidades, você **DEVE** usar os valores pré-calculados que estão na seção "RESUMO FINANCEIRO (DADOS PRÉ-CALCULADOS)". Por exemplo, se perguntarem o número de despesas pendentes, use o valor de "Quantidade de Despesas Pendentes".
+3.  <strong>SEJA UM APRESENTADOR DE DADOS:</strong> Sua principal função é apresentar os dados que foram fornecidos a você. Se o usuário pedir para listar as despesas pendentes, use a "LISTA DETALHADA DE TRANSAÇÕES PENDENTES".
+4.  <strong>BASEADO EM DADOS, SEM ALARMISMO:</strong> Suas análises devem ser 100% baseadas nos dados fornecidos. Não use linguagem alarmista como "situação crítica". Em vez disso, aponte os fatos. Ex: "Observei que o valor total de suas despesas pendentes é maior que o seu saldo disponível."
+5.  <strong>NÃO PEÇA INFORMAÇÕES:</strong> Você já tem todos os dados. NUNCA peça ao usuário para registrar transações. Se uma informação não está no resumo, diga que não a encontrou.
 6.  <strong>PERSONA E FORMATAÇÃO:</strong> Siga estritamente o papel e o tom definidos abaixo e use apenas HTML básico (<strong>, <br>, <ul>, <li>). NUNCA use Markdown.
     *   <strong>Personagem:</strong> ${persona}
     *   <strong>Personalidade:</strong> ${personality}
----
-<strong>GLOSSÁRIO:</strong>
-- <strong>Caixinha:</strong> Meta de poupança. O dinheiro aqui não faz parte do saldo disponível.
-- <strong>Orçamento:</strong> Limite de gastos mensal para uma categoria.
-- <strong>Despesa Pendente:</strong> Uma conta ainda não paga. Verifique a data dela contra a "data de hoje" para ver se está atrasada.
 ---`;
 
         // Busca os dados mais recentes antes de enviar a mensagem
@@ -2169,7 +2135,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const category = categories.find(c => c.id === budget.categoryId);
                 const categoryName = category ? category.name : 'Categoria Desconhecida';
                 const actualSpent = transactions.filter(t => 
-                    t.categoryId === budget.categoryId && t.type === 'expense' && (t.status === 'Pago' || t.status === 'Recebido' || t.status === 'Confirmado')
+                    t.categoryId === budget.categoryId && t.type === 'expense' && (t.status === 'Pago')
                 ).reduce((sum, t) => sum + parseFloat(t.amount), 0);
                 const remaining = budget.amount - actualSpent; // Use budget.amount
                 budgetDataString += `- Categoria: ${categoryName}, Orçado: ${formatCurrency(budget.amount)}, Gasto Real: ${formatCurrency(actualSpent)}, Saldo: ${formatCurrency(remaining)}<br>`;
@@ -2729,7 +2695,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else {
             // Se o clique foi FORA de qualquer botão de menu, fecha todos os dropdowns
             document.querySelectorAll('.action-menu-dropdown').forEach(dropdown => {
-                if(dropdown) {
+                if(dropdown && !dropdown.classList.contains('hidden')) {
                     dropdown.classList.add('hidden');
                 }
             });
@@ -2780,7 +2746,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         centerTextDiv.innerHTML = '';
 
         const expensesByCategory = transactions
-            .filter(t => t.type === 'expense' && t.date.startsWith(getCurrentMonthYYYYMM(chartMonth)) && (t.status === 'Pago' || t.status === 'Recebido' || t.status === 'Confirmado'))
+            .filter(t => t.type === 'expense' && t.date.startsWith(getCurrentMonthYYYYMM(chartMonth)) && t.status === 'Pago')
             .reduce((acc, t) => {
                 const category = categories.find(c => c.id === t.categoryId);
                 const categoryName = category ? category.name : 'Sem Categoria';
@@ -2879,11 +2845,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         const monthFilter = getCurrentMonthYYYYMM(chartMonth);
 
         const totalIncome = transactions
-            .filter(t => t.type === 'income' && t.date.startsWith(monthFilter) && (t.status === 'Recebido' || t.status === 'Confirmado'))
+            .filter(t => t.type === 'income' && t.date.startsWith(monthFilter) && t.status === 'Recebido')
             .reduce((sum, t) => sum + parseFloat(t.amount), 0);
 
         const totalExpense = transactions
-            .filter(t => t.type === 'expense' && t.date.startsWith(monthFilter) && (t.status === 'Pago' || t.status === 'Confirmado'))
+            .filter(t => t.type === 'expense' && t.date.startsWith(monthFilter) && t.status === 'Pago')
             .reduce((sum, t) => sum + parseFloat(t.amount), 0);
 
         if (expenseChartInstance) {
@@ -2965,11 +2931,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             const monthYYYYMM = getCurrentMonthYYYYMM(date);
             
             const monthIncome = transactions
-                .filter(t => t.date.startsWith(monthYYYYMM) && t.type === 'income' && (t.status === 'Recebido' || t.status === 'Confirmado'))
+                .filter(t => t.date.startsWith(monthYYYYMM) && t.type === 'income' && t.status === 'Recebido')
                 .reduce((sum, t) => sum + parseFloat(t.amount), 0);
             
             const monthExpense = transactions
-                .filter(t => t.date.startsWith(monthYYYYMM) && t.type === 'expense' && (t.status === 'Pago' || t.status === 'Confirmado'))
+                .filter(t => t.date.startsWith(monthYYYYMM) && t.type === 'expense' && t.status === 'Pago')
                 .reduce((sum, t) => sum + parseFloat(t.amount), 0);
 
             const monthCaixinhaNet = transactions
@@ -3821,5 +3787,7 @@ if (testNotificationButton) {
         sendTestNotification();
     });
 }
+
       
+
 
