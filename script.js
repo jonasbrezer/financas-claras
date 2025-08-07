@@ -392,6 +392,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const expenseParserInput = document.getElementById('expense-parser-input');
     const analyzeExpensesButton = document.getElementById('analyze-expenses-button');
 
+    // NOVO: Botão de Teste de Notificação
+    const testNotificationButton = document.getElementById('test-notification-button');
+
 
     // Carrega todos os dados do Firestore
     async function loadAllDataFromFirestore() {
@@ -500,6 +503,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 renderTransactions();
                 updateDashboardAndTransactionSummaries();
                 renderChart();
+                checkAndSendDailyNotification(); // Checa por notificações após carregar transações
             }, (error) => {
                 console.error("Erro ao carregar Transações do Firestore:", error);
             });
@@ -753,9 +757,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         let totalGlobalPaidExpenses = 0;
         let totalPaidExpensesThisMonth = 0;
         let totalPendingExpensesThisMonth = 0;
-    
+
         const currentMonthYYYYMM = getCurrentMonthYYYYMM(currentMonth);
-    
+
         // Calcula o saldo cumulativo global (até o final de todos os tempos)
         transactions.forEach(t => {
             const isConfirmed = t.status === 'Recebido' || t.status === 'Pago' || t.status === 'Confirmado';
@@ -773,37 +777,36 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             }
         });
-    
+
         // Calcula as despesas PAGAS e PENDENTES para o mês ATUALMENTE exibido
         transactions.forEach(t => {
             const transactionMonth = t.date.substring(0, 7);
             if (transactionMonth === currentMonthYYYYMM) {
-                if (t.type === 'expense') {
-                    if (t.status === 'Pago') {
-                        totalPaidExpensesThisMonth += parseFloat(t.amount);
-                    } else if (t.status === 'Pendente') {
-                        totalPendingExpensesThisMonth += parseFloat(t.amount);
-                    }
+                if (t.status === 'Pendente') { // Aplica-se a receitas e despesas
+                    totalPendingExpensesThisMonth += parseFloat(t.amount);
+                } else if (t.type === 'expense' && t.status === 'Pago') {
+                    totalPaidExpensesThisMonth += parseFloat(t.amount);
                 }
             }
         });
-    
+
         const cumulativeBalance = totalGlobalIncome - totalGlobalPaidExpenses;
         const totalCaixinhasSaved = categories
             .filter(cat => cat.type === 'caixinha')
             .reduce((sum, caixinha) => sum + parseFloat(caixinha.savedAmount || 0), 0);
-    
+
         // Atualiza Dashboard
         if (dashboardCurrentBalance) dashboardCurrentBalance.textContent = formatCurrency(cumulativeBalance);
         if (dashboardPaidExpenses) dashboardPaidExpenses.textContent = formatCurrency(totalPaidExpensesThisMonth);
         if (dashboardPendingExpenses) dashboardPendingExpenses.textContent = formatCurrency(totalPendingExpensesThisMonth);
         if (dashboardTotalCaixinhasSaved) dashboardTotalCaixinhasSaved.textContent = formatCurrency(totalCaixinhasSaved);
-    
+
         // Atualiza Cabeçalho Compacto na tela de Transações
         if (compactBalance) compactBalance.textContent = formatCurrency(cumulativeBalance);
         if (compactPending) compactPending.textContent = formatCurrency(totalPendingExpensesThisMonth);
         if (compactSaved) compactSaved.textContent = formatCurrency(totalCaixinhasSaved);
     }
+
 
 
 
@@ -3654,6 +3657,169 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 });
 
-    
+// --- NOVO: Funções para Notificações Nativas via Kodular ---
 
+/**
+ * Verifica se já foi enviada uma notificação hoje.
+ * @returns {boolean} - True se uma notificação já foi enviada, false caso contrário.
+ */
+function hasSentNotificationToday() {
+    const lastSentDate = localStorage.getItem('lastNotificationDate');
+    if (!lastSentDate) {
+        return false;
+    }
+    const today = new Date().toISOString().split('T')[0];
+    return lastSentDate === today;
+}
+
+/**
+ * Marca que uma notificação foi enviada hoje.
+ */
+function markNotificationAsSentToday() {
+    const today = new Date().toISOString().split('T')[0];
+    localStorage.setItem('lastNotificationDate', today);
+}
+
+/**
+ * Busca por transações pendentes que vencem amanhã e prepara o conteúdo para notificação.
+ * Gera também um insight diário da IA.
+ * Envia os dados para o Kodular via WebViewString.
+ */
+async function checkAndSendDailyNotification() {
+    // 1. Verifica se a notificação do dia já foi enviada para evitar spam
+    if (hasSentNotificationToday()) {
+        console.log("Notificação diária já enviada.");
+        return;
+    }
+
+    // 2. Verifica se a API de IA está pronta
+    if (!isGeminiApiReady) {
+        console.log("API da IA não está pronta. Abortando notificação.");
+        return;
+    }
+    
+    // 3. Encontra transações pendentes que vencem amanhã
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().split('T')[0];
+    
+    const upcomingTransactions = transactions.filter(t => t.date === tomorrowStr && t.status === 'Pendente');
+
+    // Monta a primeira parte da mensagem (se houver vencimentos)
+    let upcomingMessage = '';
+    if (upcomingTransactions.length > 0) {
+        const total = upcomingTransactions.reduce((sum, t) => sum + parseFloat(t.amount), 0);
+        const type = upcomingTransactions[0].type === 'income' ? 'recebimentos' : 'despesas';
+        upcomingMessage = `Atenção: Você tem ${upcomingTransactions.length} ${type} no valor de ${formatCurrency(total)} vencendo amanhã.`;
+    }
+
+    // 4. Gera um insight rápido da IA como resumo do dia
+    const insightPrompt = `
+        Analise os dados financeiros a seguir.
+        Sua tarefa é fornecer um insight MUITO CURTO e direto (máximo de 2 frases) para ser usado em uma notificação.
+        Foque em UMA informação útil para o usuário saber hoje, como o saldo atual ou o total de despesas pendentes.
+        Exemplo: "Seu saldo atual é de R$ 1.234,56 e você possui R$ 500,00 em contas pendentes."
+        Responda apenas com o texto do insight, sem formatação.
+
+        DADOS:
+        ${getFinancialDataForAI()}
+    `;
+
+    const payload = {
+        contents: [{ role: "user", parts: [{ text: insightPrompt }] }],
+        generationConfig: {
+            temperature: 0.5,
+            maxOutputTokens: 100
+        },
+    };
+    
+    let aiInsight = 'Abra o app para ver seus insights.'; // Mensagem padrão
+    try {
+        const result = await tryNextApiKey(payload, currentGeminiApiKeyIndex);
+        if (result.candidates && result.candidates[0].content.parts[0].text) {
+            aiInsight = result.candidates[0].content.parts[0].text.trim();
+        }
+    } catch (error) {
+        console.error("Erro ao gerar insight para notificação:", error);
+    }
+    
+    // 5. Combina as mensagens e só envia se houver algo relevante
+    let finalMessageBody = upcomingMessage;
+    if (finalMessageBody && aiInsight) {
+        finalMessageBody += `\n${aiInsight}`; // Adiciona o insight se houver lembrete
+    } else if (aiInsight) {
+        finalMessageBody = aiInsight; // Se não houver lembrete, usa só o insight
+    }
+
+    if (!finalMessageBody) {
+        console.log("Nenhum conteúdo relevante para notificar hoje.");
+        return; // Não envia notificação vazia
+    }
+    
+    // 6. Prepara o JSON para o Kodular
+    const notificationData = {
+        title: "Seu Resumo Financeiro Diário",
+        message: finalMessageBody
+    };
+    
+    // 7. Envia para o Kodular através do WebViewString
+    if (window.AppInventor && typeof window.AppInventor.setWebViewString === 'function') {
+        try {
+            const jsonString = JSON.stringify(notificationData);
+            window.AppInventor.setWebViewString(jsonString);
+            console.log("Enviando dados de notificação para o Kodular:", jsonString);
+            
+            // Marca a notificação como enviada para não repetir no mesmo dia
+            markNotificationAsSentToday();
+        } catch (e) {
+            console.error("Erro ao enviar dados para o Kodular:", e);
+        }
+    } else {
+        console.log("Interface do Kodular (WebViewString) não encontrada. A notificação não será enviada.");
+        // Em um ambiente de teste no navegador, você pode "simular" o envio aqui
+        // console.log("Simulação de notificação:", notificationData);
+        // markNotificationAsSentToday();
+    }
+}
+    
+// --- NOVO: Função para Enviar Notificação de Teste ---
+async function sendTestNotification() {
+    // 1. Verifica se a API de IA está pronta
+    if (!isGeminiApiReady) {
+        showToast("API da IA não está pronta. Configure suas chaves de API.", "error");
+        console.log("API da IA não está pronta. Abortando notificação de teste.");
+        return;
+    }
+    
+    // 2. Prepara o JSON para o Kodular com uma mensagem de teste
+    const notificationData = {
+        title: "Teste de Notificação",
+        message: "Esta é uma notificação de teste do Finanças Claras. Se você a recebeu, a integração está funcionando!"
+    };
+    
+    // 3. Envia para o Kodular através do WebViewString
+    if (window.AppInventor && typeof window.AppInventor.setWebViewString === 'function') {
+        try {
+            const jsonString = JSON.stringify(notificationData);
+            window.AppInventor.setWebViewString(jsonString);
+            showToast("Notificação de teste enviada!", "success");
+            console.log("Enviando dados de notificação de teste para o Kodular:", jsonString);
+        } catch (e) {
+            showToast(`Erro ao enviar notificação de teste: ${e.message}`, "error");
+            console.error("Erro ao enviar dados de teste para o Kodular:", e);
+        }
+    } else {
+        showToast("Interface do Kodular não encontrada.", "error");
+        console.log("Interface do Kodular (WebViewString) não encontrada. A notificação de teste não pôde ser enviada.");
+    }
+}
+
+// --- NOVO: Event Listener para o Botão de Teste ---
+if (testNotificationButton) {
+    testNotificationButton.addEventListener('click', (e) => {
+        e.preventDefault();
+        sendTestNotification();
+    });
+}
       
+
