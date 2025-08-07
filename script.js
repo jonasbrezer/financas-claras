@@ -1,4 +1,5 @@
 
+
 // Importa os módulos necessários do Firebase
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
@@ -637,7 +638,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const userBudgetsRef = getUserDocumentRef('budgets', 'userBudgets');
             if (userBudgetsRef) {
                 await setDoc(userBudgetsRef, { items: budgets || [] });
-                showToast("Orçamento salvo com sucesso!", "success");
+                // Não mostra toast aqui para não ser verboso, a UI se atualiza
             }
         } catch (error) {
             console.error("Erro ao salvar Orçamentos:", error);
@@ -750,11 +751,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         let totalGlobalIncome = 0;
         let totalGlobalPaidExpenses = 0;
         let totalPaidExpensesThisMonth = 0;
-        let totalPendingExpenses = 0;
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        let totalPendingExpensesThisMonth = 0; // CORRIGIDO: Agora é específico para o mês
+    
         const currentMonthYYYYMM = getCurrentMonthYYYYMM(currentMonth);
-
+    
+        // Calcula o saldo cumulativo global (até o final de todos os tempos)
         transactions.forEach(t => {
             const isConfirmed = t.status === 'Recebido' || t.status === 'Pago' || t.status === 'Confirmado';
             if (isConfirmed) {
@@ -771,34 +772,35 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             }
         });
-
+    
+        // Calcula as despesas PAGAS e PENDENTES para o mês ATUALMENTE exibido
         transactions.forEach(t => {
             const transactionMonth = t.date.substring(0, 7);
-            if (t.type === 'expense' && (t.status === 'Pago') && transactionMonth === currentMonthYYYYMM) {
-                totalPaidExpensesThisMonth += parseFloat(t.amount);
+            if (transactionMonth === currentMonthYYYYMM) {
+                if (t.type === 'expense') {
+                    if (t.status === 'Pago') {
+                        totalPaidExpensesThisMonth += parseFloat(t.amount);
+                    } else if (t.status === 'Pendente') {
+                        totalPendingExpensesThisMonth += parseFloat(t.amount);
+                    }
+                }
             }
         });
-
-        transactions.forEach(t => {
-            if (t.type === 'expense' && t.status === 'Pendente') {
-                totalPendingExpenses += parseFloat(t.amount);
-            }
-        });
-
+    
         const cumulativeBalance = totalGlobalIncome - totalGlobalPaidExpenses;
         const totalCaixinhasSaved = categories
             .filter(cat => cat.type === 'caixinha')
             .reduce((sum, caixinha) => sum + parseFloat(caixinha.savedAmount || 0), 0);
-
+    
         // Atualiza Dashboard
         if (dashboardCurrentBalance) dashboardCurrentBalance.textContent = formatCurrency(cumulativeBalance);
         if (dashboardPaidExpenses) dashboardPaidExpenses.textContent = formatCurrency(totalPaidExpensesThisMonth);
-        if (dashboardPendingExpenses) dashboardPendingExpenses.textContent = formatCurrency(totalPendingExpenses);
+        if (dashboardPendingExpenses) dashboardPendingExpenses.textContent = formatCurrency(totalPendingExpensesThisMonth);
         if (dashboardTotalCaixinhasSaved) dashboardTotalCaixinhasSaved.textContent = formatCurrency(totalCaixinhasSaved);
-
+    
         // Atualiza Cabeçalho Compacto na tela de Transações
         if (compactBalance) compactBalance.textContent = formatCurrency(cumulativeBalance);
-        if (compactPending) compactPending.textContent = formatCurrency(totalPendingExpenses);
+        if (compactPending) compactPending.textContent = formatCurrency(totalPendingExpensesThisMonth);
         if (compactSaved) compactSaved.textContent = formatCurrency(totalCaixinhasSaved);
     }
 
@@ -1079,19 +1081,28 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             showConfirmationModal(
                 "Confirmar Exclusão",
-                `Tem certeza que deseja excluir a categoria "${categoryToDelete.name}"? Todas as transações associadas a ela ficarão sem categoria.`,
+                `Tem certeza que deseja excluir a categoria "${categoryToDelete.name}"? As transações associadas não serão mais consideradas nos orçamentos e os orçamentos para esta categoria serão apagados.`,
                 async () => {
+                    // Marca as transações como "desconhecidas", mas elas não serão mais usadas em cálculos de orçamento.
+                    transactions.forEach(t => {
+                        if (t.categoryId === id) {
+                            t.categoryId = 'unknown'; // Categoria 'unknown' é ignorada pela IA.
+                        }
+                    });
+                    
+                    // Apaga os orçamentos associados
+                    budgets = budgets.filter(b => b.categoryId !== id);
+
+                    // Remove a categoria da lista
                     categories = categories.filter(cat => cat.id !== id);
-                    const transactionsToUpdate = transactions.filter(t => t.categoryId === id);
-                    for (const t of transactionsToUpdate) {
-                        t.categoryId = 'unknown'; // Define como categoria desconhecida
-                        t.transactionType = null; // Limpa o tipo de transação se for caixinha
-                        t.caixinhaId = null; // Limpa o ID da caixinha
-                        await saveTransaction(t);
-                    }
+
+                    // Salva todas as mudanças
+                    await saveAllTransactionsInBatch();
+                    await saveBudgets();
                     await saveCategories();
+                    
                     showToast("Categoria deletada.", "info");
-                    updateDashboardAndTransactionSummaries();
+                    // A UI será atualizada pelos listeners do onSnapshot
                 }
             );
         }
@@ -1170,9 +1181,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         
         const categoryFilter = filterCategorySelect.value;
 
+        // NOVO: Verifica se o filtro "Ver Tudo" está ativo
+        const showAllPill = document.querySelector('.filter-pill[data-value="show-all"]');
+        const isShowAllActive = showAllPill && showAllPill.classList.contains('active');
+
         const filteredTransactions = transactions.filter(t => {
-            const transactionMonth = t.date.substring(0, 7);
-            if (transactionMonth !== currentMonthYYYYMM) return false;
+            // Se "Ver Tudo" não estiver ativo, filtra pelo mês
+            if (!isShowAllActive) {
+                const transactionMonth = t.date.substring(0, 7);
+                if (transactionMonth !== currentMonthYYYYMM) return false;
+            }
             
             if (typeFilter !== 'all' && t.type !== typeFilter) return false;
             if (statusFilter !== 'all' && t.status !== statusFilter) return false;
@@ -1230,7 +1248,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if (category) {
                     categoryName = category.name;
                     bulletColor = category.color;
-                } else {
+                } else if (transaction.categoryId === 'unknown') {
                     categoryName = 'Categoria Desconhecida';
                     bulletColor = '#9E9E9E';
                 }
@@ -1662,7 +1680,22 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // --- Funções de Navegação por Mês ---
     function updateMonthDisplay() {
-        currentMonthDisplay.textContent = formatMonthDisplay(currentMonth);
+        const showAllPill = document.querySelector('.filter-pill[data-value="show-all"]');
+        const isShowAllActive = showAllPill && showAllPill.classList.contains('active');
+
+        if (isShowAllActive) {
+            currentMonthDisplay.textContent = "Exibindo Tudo";
+            prevMonthButton.disabled = true;
+            nextMonthButton.disabled = true;
+            prevMonthButton.classList.add('opacity-50', 'cursor-not-allowed');
+            nextMonthButton.classList.add('opacity-50', 'cursor-not-allowed');
+        } else {
+            currentMonthDisplay.textContent = formatMonthDisplay(currentMonth);
+            prevMonthButton.disabled = false;
+            nextMonthButton.disabled = false;
+            prevMonthButton.classList.remove('opacity-50', 'cursor-not-allowed');
+            nextMonthButton.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
     }
 
     prevMonthButton.addEventListener('click', () => {
@@ -1731,7 +1764,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         currentMonthBudgets.forEach(budget => {
             const category = categories.find(c => c.id === budget.categoryId);
-            if (!category) return; // Pula se a categoria foi deletada
+            if (!category) {
+                // Se a categoria do orçamento não existe mais, não renderiza o card.
+                // A lógica de deleção de categoria deve remover orçamentos associados.
+                return;
+            }
             
             // Calcula o gasto real para essa categoria no mês corrente
             const totalSpent = transactions.filter(t => 
@@ -1867,50 +1904,80 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Função para obter dados financeiros formatados para a IA
     function getFinancialDataForAI() {
-        let dataString = `A data de hoje é ${new Date().toLocaleDateString('pt-BR')}.\n\n`;
-    
-        // 1. Mapeia IDs de categoria para nomes para facilitar a leitura
+        // --- PREPARAÇÃO DOS DADOS ---
         const categoryMap = categories.reduce((map, cat) => {
             map[cat.id] = cat.name;
             return map;
         }, {});
     
-        // 2. Formata a lista de transações
-        dataString += "<strong>LISTA DE TODAS AS TRANSAÇÕES:</strong>\n";
+        const currentMonthYYYYMM = getCurrentMonthYYYYMM(new Date());
+    
+        // Calcula resumos financeiros com base nos dados GLOBAIS
+        let totalGlobalIncome = 0;
+        let totalGlobalPaidExpenses = 0;
+        transactions.forEach(t => {
+            const isConfirmed = t.status === 'Recebido' || t.status === 'Pago' || t.status === 'Confirmado';
+            if (isConfirmed) {
+                if (t.type === 'income') totalGlobalIncome += parseFloat(t.amount);
+                else if (t.type === 'expense') totalGlobalPaidExpenses += parseFloat(t.amount);
+                else if (t.type === 'caixinha' && t.transactionType === 'deposit') totalGlobalPaidExpenses += parseFloat(t.amount);
+                else if (t.type === 'caixinha' && t.transactionType === 'withdraw') totalGlobalIncome += parseFloat(t.amount);
+            }
+        });
+        const cumulativeBalance = totalGlobalIncome - totalGlobalPaidExpenses;
+    
+        const totalPendingExpenses = transactions
+            .filter(t => t.type === 'expense' && t.status === 'Pendente' && t.categoryId !== 'unknown')
+            .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+    
+        const totalCaixinhasSaved = categories
+            .filter(cat => cat.type === 'caixinha')
+            .reduce((sum, caixinha) => sum + parseFloat(caixinha.savedAmount || 0), 0);
+    
+        // --- FORMATAÇÃO DA STRING PARA A IA ---
+        let dataString = `A data de hoje é ${new Date().toLocaleDateString('pt-BR')}.\n\n`;
+    
+        // 1. Resumo Financeiro (Dados Pré-calculados)
+        dataString += "<strong>RESUMO FINANCEIRO (DADOS PRÉ-CALCULADOS):</strong>\n";
+        dataString += `- Saldo Total Disponível (Global): ${formatCurrency(cumulativeBalance)}\n`;
+        dataString += `- Total de Despesas Pendentes (Geral): ${formatCurrency(totalPendingExpenses)}\n`;
+        dataString += `- Total Guardado em Caixinhas: ${formatCurrency(totalCaixinhasSaved)}\n\n`;
+    
+        // 2. Lista de Transações Detalhada
+        dataString += "<strong>LISTA DETALHADA DE TRANSAÇÕES:</strong>\n";
         if (transactions.length > 0) {
             const formattedTransactions = transactions.map(t => {
                 const categoryName = categoryMap[t.categoryId] || 'Desconhecida';
+                if (t.categoryId === 'unknown') return null; // Ignora transações sem categoria
                 return `- Descrição: ${t.description}, Valor: ${formatCurrency(t.amount)}, Data: ${t.date}, Categoria: ${categoryName}, Status: ${t.status}, Tipo: ${t.type}`;
-            }).join('\n');
+            }).filter(Boolean).join('\n');
             dataString += formattedTransactions;
         } else {
             dataString += "Nenhuma transação registrada.\n";
         }
     
-        // 3. Formata a lista de orçamentos
+        // 3. Lista de Orçamentos
         dataString += "\n\n<strong>LISTA DE ORÇAMENTOS DO MÊS ATUAL:</strong>\n";
-        const currentMonthYYYYMM = getCurrentMonthYYYYMM(new Date());
         const currentBudgets = budgets.filter(b => b.month === currentMonthYYYYMM);
         if (currentBudgets.length > 0) {
             const formattedBudgets = currentBudgets.map(b => {
-                const categoryName = categoryMap[b.categoryId] || 'Desconhecida';
+                const categoryName = categoryMap[b.categoryId];
+                if (!categoryName) return null;
                 const spent = transactions
-                    .filter(t => t.categoryId === b.categoryId && t.date.startsWith(currentMonthYYYYMM) && t.status === 'Pago')
+                    .filter(t => t.categoryId === b.categoryId && t.date.startsWith(currentMonthYYYYMM) && t.status === 'Pago' && t.categoryId !== 'unknown')
                     .reduce((sum, t) => sum + parseFloat(t.amount), 0);
                 return `- Categoria: ${categoryName}, Orçamento: ${formatCurrency(b.amount)}, Gasto: ${formatCurrency(spent)}`;
-            }).join('\n');
+            }).filter(Boolean).join('\n');
             dataString += formattedBudgets;
         } else {
             dataString += "Nenhum orçamento configurado para o mês atual.\n";
         }
-        
-        // 4. Formata a lista de Caixinhas
+    
+        // 4. Lista de Caixinhas
         dataString += "\n\n<strong>LISTA DE CAIXINHAS (METAS DE POUPANÇA):</strong>\n";
         const caixinhas = categories.filter(c => c.type === 'caixinha');
-        if(caixinhas.length > 0){
-            const formattedCaixinhas = caixinhas.map(c => {
-                 return `- Nome: ${c.name}, Valor Guardado: ${formatCurrency(c.savedAmount || 0)}, Meta: ${formatCurrency(c.targetAmount || 0)}`;
-            }).join('\n');
+        if (caixinhas.length > 0) {
+            const formattedCaixinhas = caixinhas.map(c => `- Nome: ${c.name}, Valor Guardado: ${formatCurrency(c.savedAmount || 0)}, Meta: ${formatCurrency(c.targetAmount || 0)}`).join('\n');
             dataString += formattedCaixinhas;
         } else {
             dataString += "Nenhuma caixinha criada.\n";
@@ -1945,45 +2012,28 @@ document.addEventListener('DOMContentLoaded', async () => {
         const persona = aiConfig.aiPersona || "";
         const personality = aiConfig.aiPersonality || "";
 
-        const baseSystemInstruction = `Você é um assistente financeiro especialista, agindo como o "cérebro" de um aplicativo de finanças. Sua única função é ANALISAR os dados financeiros fornecidos e responder às perguntas do usuário com base NESSES DADOS. Você não adiciona, edita ou apaga nada.
+        const baseSystemInstruction = `Você é um assistente financeiro especialista. Sua função é analisar os dados fornecidos e responder às perguntas do usuário com base NESSES DADOS.
 
-<strong>REGRAS DE COMPORTAMENTO CRÍTICAS:</strong>
-1.  <strong>SEM SAUDAÇÕES:</strong> NÃO comece suas respostas com "Olá!", "Oi," ou qualquer outra saudação. Vá direto ao ponto.
-2.  <strong>BASEADO EM DADOS:</strong> Suas respostas devem ser 100% baseadas nos dados fornecidos na seção "DADOS FINANCEIROS COMPLETOS DO USUÁRIO". NUNCA invente informações.
-3.  <strong>INTELIGÊNCIA CONTEXTUAL:</strong> Use a "data de hoje" fornecida para determinar se as despesas pendentes estão atrasadas. Compare a data da transação com a data de hoje.
-4.  <strong>NÃO PEÇA INFORMAÇÕES:</strong> Você já tem todos os dados. NUNCA peça ao usuário para registrar transações ou fornecer informações que já estão na lista. Em vez disso, analise a lista que você recebeu. Se uma informação não está lá, diga que não a encontrou nos dados.
-5.  <strong>SEJA UM ANALISTA:</strong> Aja como um especialista. Identifique tendências, gastos excessivos, contas atrasadas e oportunidades de economia.
-6.  <strong>PERSONA:</strong> Siga estritamente o papel e o tom definidos abaixo.
+<strong>REGRAS DE COMPORTAMENTO CRÍTICAS E INVIOLÁVEIS:</strong>
+1.  <strong>NÃO FAÇA CÁLCULOS:</strong> Você está **TERMINANTEMENTE PROIBIDO** de somar, subtrair ou realizar qualquer cálculo próprio com os valores das transações.
+2.  <strong>USE OS TOTAIS FORNECIDOS:</strong> Para responder sobre saldos, totais de despesas ou qualquer valor resumido, você **DEVE** usar os valores pré-calculados que estão na seção "RESUMO FINANCEIRO (DADOS PRÉ-CALCULADOS)". Ignore a lista de transações para fins de cálculo de totais.
+3.  <strong>SEJA UM APRESENTADOR DE DADOS:</strong> Sua principal função é apresentar os dados que foram fornecidos a você. Se o usuário perguntar o total de despesas pendentes, responda com o valor de "Total de Despesas Pendentes (Geral)" do resumo.
+4.  <strong>BASEADO EM DADOS, SEM ALARMISMO:</strong> Suas análises devem ser 100% baseadas nos dados. Não use linguagem alarmista como "situação crítica". Em vez disso, aponte os fatos. Ex: "Observei que o valor das suas despesas pendentes é maior que o seu saldo disponível."
+5.  <strong>NÃO PEÇA INFORMAÇÕES:</strong> Você já tem todos os dados. NUNCA peça ao usuário para registrar transações. Se uma informação não está na lista ou no resumo, diga que não a encontrou.
+6.  <strong>PERSONA E FORMATAÇÃO:</strong> Siga estritamente o papel e o tom definidos abaixo e use apenas HTML básico (<strong>, <br>, <ul>, <li>). NUNCA use Markdown.
     *   <strong>Personagem:</strong> ${persona}
     *   <strong>Personalidade:</strong> ${personality}
-7.  <strong>FORMATAÇÃO HTML:</strong> É CRÍTICO e OBRIGATÓRIO que você use apenas HTML básico (<strong>, <br>, <ul>, <li>) para formatar. NUNCA, em hipótese alguma, use Markdown (*, **, _, #). O uso de Markdown quebrará a exibição para o usuário.
-
 ---
-<strong>GLOSSÁRIO (obrigatório conhecer):</strong>
-- <strong>Caixinha:</strong> Meta de poupança. O dinheiro guardado aqui não faz parte do saldo geral disponível.
-- <strong>Orçamento:</strong> Limite de gastos para uma categoria específica no mês.
-- <strong>Despesa Pendente:</strong> Uma conta que ainda não foi paga. Você deve verificar a data dela contra a "data de hoje" para ver se está atrasada.
+<strong>GLOSSÁRIO:</strong>
+- <strong>Caixinha:</strong> Meta de poupança. O dinheiro aqui não faz parte do saldo disponível.
+- <strong>Orçamento:</strong> Limite de gastos mensal para uma categoria.
+- <strong>Despesa Pendente:</strong> Uma conta ainda não paga. Verifique a data dela contra a "data de hoje" para ver se está atrasada.
 ---`;
 
-
-        let currentFinancialData = "";
-        const refreshKeywords = ["atualizar dados", "recarregar dados", "consultar dados", "verificar finanças", "novos dados", "dados atuais", "meus dados", "favor, atualize meus dados financeiros"]; 
-
-        const needsRefresh = refreshKeywords.some(keyword => userMessage.toLowerCase().includes(keyword));
-
-        if (!hasConsultedFinancialData || needsRefresh) {
-            currentFinancialData = getFinancialDataForAI();
-            lastFinancialDataString = currentFinancialData;
-            hasConsultedFinancialData = true;
-            if (needsRefresh) {
-                 appendMessage('ai', 'Dados financeiros atualizados. Como posso te ajudar?', 'info');
-            } else {
-                 appendMessage('ai', 'Analisando seus dados financeiros para a nossa conversa. Um momento...', 'info');
-            }
-        }
+        const currentFinancialData = getFinancialDataForAI();
 
         const contentsPayload = [...chatHistory];
-        const userPromptWithData = `DADOS FINANCEIROS COMPLETOS DO USUÁRIO:\n${lastFinancialDataString}\n\nMENSAGEM DO USUÁRIO:\n${userMessage}`;
+        const userPromptWithData = `DADOS FINANCEIROS COMPLETOS DO USUÁRIO:\n${currentFinancialData}\n\nMENSAGEM DO USUÁRIO:\n${userMessage}`;
         contentsPayload.push({ role: "user", parts: [{ text: userPromptWithData }] });
         
         const payload = {
@@ -2009,8 +2059,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (result && result.candidates && result.candidates[0].content.parts[0].text) {
                 const finalResponse = result.candidates[0].content.parts[0].text;
                 appendMessage('ai', finalResponse);
-                // Adiciona a pergunta do usuário e a resposta do modelo ao histórico
-                chatHistory.push({ role: "user", parts: [{ text: userMessage }] }); // Salva a pergunta original, sem os dados
+                chatHistory.push({ role: "user", parts: [{ text: userMessage }] }); 
                 chatHistory.push({ role: "model", parts: [{ text: finalResponse }] });
             } else if (result.error) {
                 throw new Error(result.error.message || 'Erro desconhecido da API Gemini.');
@@ -2028,7 +2077,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             chatLoadingIndicator.classList.add('hidden');
             chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
             isSendingMessage = false; 
-            // Não resetar hasConsultedFinancialData aqui, para manter os dados na conversa.
         }
     }
 
@@ -2340,7 +2388,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (refreshChatDataButton) {
         refreshChatDataButton.addEventListener('click', () => {
             chatHistory = []; 
-            hasConsultedFinancialData = false;
+            // Força a IA a pegar novos dados na próxima mensagem.
             sendChatMessage("Por favor, atualize os meus dados financeiros.");
         });
     }
@@ -2349,7 +2397,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         clearChatButton.addEventListener('click', () => {
             chatMessagesDiv.innerHTML = '';
             chatHistory = []; // Limpa o histórico da sessão
-            hasConsultedFinancialData = false; // Permite que a próxima mensagem recarregue os dados
             appendMessage('ai', 'Chat limpo. Como posso ajudar a começar de novo?', 'info');
         });
     }
@@ -2527,6 +2574,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             budgets.push(newBudget);
         }
         await saveBudgets(); // Função que salva o array 'budgets' no Firestore
+        showToast("Orçamento salvo com sucesso!", "success");
         closeBudgetModal();
     });
 
@@ -2564,6 +2612,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 { label: 'Pagos', value: 'Pago' },
                 { label: 'Recebidos', value: 'Recebido' },
                 { label: 'Pendentes', value: 'Pendente' }
+            ],
+            // NOVO GRUPO PARA O FILTRO "VER TUDO"
+            view: [
+                { label: 'Ver Tudo', value: 'show-all' }
             ]
         };
     
@@ -2578,7 +2630,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     
         // Cria um separador visual
-        const separator = document.createElement('div');
+        let separator = document.createElement('div');
         separator.className = 'filter-separator';
         filterPillsContainer.appendChild(separator);
     
@@ -2589,6 +2641,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             pill.textContent = filter.label;
             pill.dataset.value = filter.value;
             pill.dataset.filterGroup = 'status';
+            filterPillsContainer.appendChild(pill);
+        });
+        
+        // NOVO: Adiciona separador e o botão "Ver Tudo"
+        separator = document.createElement('div');
+        separator.className = 'filter-separator';
+        filterPillsContainer.appendChild(separator);
+        
+        filterGroups.view.forEach((filter) => {
+            const pill = document.createElement('button');
+            pill.className = 'filter-pill';
+            pill.textContent = filter.label;
+            pill.dataset.value = filter.value;
+            pill.dataset.filterGroup = 'view';
             filterPillsContainer.appendChild(pill);
         });
     }
@@ -2615,12 +2681,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (pill.classList.contains('active')) {
                 pill.classList.remove('active');
             } else {
-                // Remove a classe 'active' de outros botões no mesmo grupo
+                // Se o grupo for "view" (Ver Tudo), só permite um ativo. Se for outro grupo, também
                 document.querySelectorAll(`.filter-pill[data-filter-group="${group}"]`).forEach(p => p.classList.remove('active'));
-                // Adiciona 'active' ao botão clicado
                 pill.classList.add('active');
             }
-    
+
+            // Se o botão "Ver Tudo" for ativado, desativa os outros filtros de tipo e status
+            if (group === 'view' && pill.classList.contains('active')) {
+                document.querySelectorAll(`.filter-pill[data-filter-group="type"], .filter-pill[data-filter-group="status"]`).forEach(p => p.classList.remove('active'));
+            } else if (group === 'type' || group === 'status') {
+                // Se qualquer outro filtro for ativado, desativa o "Ver Tudo"
+                document.querySelector('.filter-pill[data-value="show-all"]')?.classList.remove('active');
+            }
+
+            updateMonthDisplay(); // Atualiza a UI do seletor de mês
             renderTransactions(); // Re-renderiza a lista de transações com o novo filtro
         }
     });
@@ -3558,3 +3632,4 @@ document.addEventListener('DOMContentLoaded', async () => {
     expenseParserForm.addEventListener('submit', parseExpensesWithAI);
 
 });
+
