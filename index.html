@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -57,39 +58,35 @@
                 <!-- Resumos Financeiros -->
                 <div class="grid grid-cols-2 gap-4 mb-6">
                     <!-- Card Saldo Atual -->
-                    <div class="bg-white p-4 rounded-xl shadow-md flex flex-col items-start">
-                        <div class="flex items-center text-gray-500 mb-2">
-                            <i class="fa-solid fa-wallet mr-2"></i>
-                            <span class="text-sm font-medium">Saldo Atual</span>
+                    <div class="summary-card summary-card-positive">
+                        <div class="summary-card-header">
+                            <span class="summary-card-title">Saldo Atual</span>
                         </div>
-                        <p id="dashboard-current-balance" class="text-xl font-bold text-gray-800">R$ 0,00</p>
-                    </div>
-
-                    <!-- Card Despesas Pagas -->
-                    <div class="bg-white p-4 rounded-xl shadow-md flex flex-col items-start">
-                        <div class="flex items-center text-gray-500 mb-2">
-                             <i class="fa-solid fa-circle-arrow-up mr-2 text-[var(--color-red-negative)]"></i>
-                            <span class="text-sm font-medium">Despesas (Mês)</span>
-                        </div>
-                        <p id="dashboard-paid-expenses" class="text-xl font-bold text-gray-800">R$ 0,00</p>
-                    </div>
-                    
-                    <!-- Card Despesas Pendentes -->
-                    <div class="bg-white p-4 rounded-xl shadow-md flex flex-col items-start">
-                        <div class="flex items-center text-gray-500 mb-2">
-                            <i class="fa-solid fa-clock mr-2 text-orange-500"></i>
-                            <span class="text-sm font-medium">Pendentes</span>
-                        </div>
-                        <p id="dashboard-pending-expenses" class="text-xl font-bold text-gray-800">R$ 0,00</p>
+                        <p id="dashboard-current-balance" class="summary-card-value">R$ 0,00</p>
                     </div>
 
                     <!-- Card Total em Caixinhas -->
-                    <div class="bg-white p-4 rounded-xl shadow-md flex flex-col items-start">
-                        <div class="flex items-center text-gray-500 mb-2">
-                            <i class="fa-solid fa-box-archive mr-2 text-indigo-500"></i>
-                            <span class="text-sm font-medium">Guardado</span>
+                    <div class="summary-card summary-card-positive">
+                        <div class="summary-card-header">
+                            <span class="summary-card-title">Guardado</span>
                         </div>
-                        <p id="dashboard-total-caixinhas-saved" class="text-xl font-bold text-gray-800">R$ 0,00</p>
+                        <p id="dashboard-total-caixinhas-saved" class="summary-card-value">R$ 0,00</p>
+                    </div>
+                    
+                    <!-- Card Despesas Pagas -->
+                    <div class="summary-card summary-card-negative">
+                        <div class="summary-card-header">
+                            <span class="summary-card-title">Despesas (Mês)</span>
+                        </div>
+                        <p id="dashboard-paid-expenses" class="summary-card-value">R$ 0,00</p>
+                    </div>
+                    
+                    <!-- Card Despesas Pendentes -->
+                    <div class="summary-card summary-card-negative">
+                        <div class="summary-card-header">
+                            <span class="summary-card-title">Pendentes</span>
+                        </div>
+                        <p id="dashboard-pending-expenses" class="summary-card-value">R$ 0,00</p>
                     </div>
                 </div>
 
@@ -143,28 +140,19 @@
                 <!-- Cabeçalho Compacto de Resumo -->
                 <div class="compact-summary-header">
                     <div class="compact-summary-item">
-                        <i class="fa-solid fa-wallet text-green-500"></i>
-                        <div>
-                            <span class="label">Saldo Atual</span>
-                            <span id="compact-balance" class="value">R$ 0,00</span>
-                        </div>
+                        <span class="compact-summary-label">Saldo</span>
+                        <span id="compact-balance" class="compact-summary-value text-[var(--color-green-positive)]">R$ 0,00</span>
                     </div>
                     <div class="compact-summary-item">
-                        <i class="fa-solid fa-clock text-orange-500"></i>
-                        <div>
-                            <span class="label">Pendentes</span>
-                            <span id="compact-pending" class="value">R$ 0,00</span>
-                        </div>
+                        <span class="compact-summary-label">Pendentes</span>
+                        <span id="compact-pending" class="compact-summary-value text-[var(--color-red-negative)]">R$ 0,00</span>
                     </div>
                     <div class="compact-summary-item">
-                        <i class="fa-solid fa-box-archive text-indigo-500"></i>
-                        <div>
-                            <span class="label">Guardado</span>
-                            <span id="compact-saved" class="value">R$ 0,00</span>
-                        </div>
+                        <span class="compact-summary-label">Caixinhas</span>
+                        <span id="compact-caixinhas" class="compact-summary-value text-blue-500">R$ 0,00</span>
                     </div>
                 </div>
-
+                
                 <!-- Conteúdo de Lançamentos -->
                 <!-- Navegação por Mês -->
                 <div class="flex justify-between items-center bg-white p-2 rounded-xl shadow-sm mb-4">
@@ -214,6 +202,7 @@
                              <div class="action-menu-dropdown hidden">
                                 <a href="#" id="refresh-chat-data-button">Analisar novos dados</a>
                                 <a href="#" id="clear-chat-button">Limpar chat</a>
+                                 <a href="#" id="adjust-balance-button-chat">Ajustar Saldo</a>
                             </div>
                         </div>
                     </div>
@@ -451,12 +440,13 @@
                  <input type="radio" name="transaction-type" value="expense" class="hidden">
                  <input type="radio" name="transaction-type" value="deposit" class="hidden">
                  <input type="radio" name="transaction-type" value="withdraw" class="hidden">
+                 <input type="radio" name="transaction-type" value="adjust" class="hidden">
                 
                 <!-- Etapa 1: Seleção de Tipo -->
                 <div id="transaction-step-1" class="step-container">
                     <h2 class="text-2xl font-bold text-center mb-1">Nova Transação</h2>
                     <p class="text-gray-500 text-center mb-6">O que você gostaria de registrar?</p>
-                    <div class="grid grid-cols-2 gap-4 mb-2">
+                    <div class="grid grid-cols-2 gap-4 mb-4">
                         <div class="step-1-type-button" data-type="expense">
                             <i class="fa-solid fa-arrow-up text-4xl text-red-500 mb-2"></i>
                             <span class="font-semibold">Despesa</span>
@@ -472,6 +462,10 @@
                         <div class="step-1-type-button" data-type="withdraw">
                             <i class="fa-solid fa-hand-holding-dollar text-4xl text-indigo-500 mb-2"></i>
                             <span class="font-semibold">Resgatar</span>
+                        </div>
+                        <div class="step-1-type-button col-span-2" data-type="adjust">
+                            <i class="fa-solid fa-calculator text-4xl text-slate-500 mb-2"></i>
+                            <span class="font-semibold">Ajustar Saldo</span>
                         </div>
                     </div>
                     <div class="mb-6">
@@ -713,6 +707,25 @@
             </div>
         </div>
     </div>
+
+    <!-- NOVO: Modal para Ajuste de Saldo -->
+    <div id="balance-adjustment-modal" class="modal">
+        <div class="modal-content relative">
+            <span id="close-balance-adjustment-modal" class="close-button">&times;</span>
+            <h2 class="text-2xl font-bold mb-4">Ajustar Saldo da Conta</h2>
+            <p class="text-gray-500 mb-4 text-sm">Insira o valor exato que você possui atualmente. O aplicativo criará uma transação de ajuste para corrigir a diferença.</p>
+            <form id="balance-adjustment-form">
+                <div class="mb-4">
+                    <label for="new-balance-amount" class="block text-sm font-medium text-gray-700 mb-1">Saldo Correto</label>
+                    <input type="text" inputmode="decimal" id="new-balance-amount" class="w-full text-xl font-bold border-gray-300 rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-[var(--color-blue-primary)]" placeholder="R$ 0,00" required>
+                </div>
+                <div class="flex justify-end gap-2 mt-6">
+                    <button type="button" id="cancel-adjustment-button" class="bg-gray-200 text-gray-700 font-bold py-2 px-4 rounded-lg">Cancelar</button>
+                    <button type="submit" class="bg-[var(--color-blue-primary)] text-white font-bold py-2 px-4 rounded-lg">Ajustar Saldo</button>
+                </div>
+            </form>
+        </div>
+    </div>
     
     <!-- Container para Toasts -->
     <div id="toast-container"></div>
@@ -721,3 +734,5 @@
     <script src="script.js" type="module"></script>
 </body>
 </html>
+    
+    
