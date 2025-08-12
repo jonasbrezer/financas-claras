@@ -121,6 +121,220 @@ function formatMonthDisplay(date) {
     return date.toLocaleDateString('pt-BR', options);
 }
 
+// --- NOVO: Funções para Notificações Nativas via Kodular ---
+
+/**
+ * Verifica se já foi enviada uma notificação hoje.
+ * @returns {boolean} - True se uma notificação já foi enviada, false caso contrário.
+ */
+function hasSentNotificationToday() {
+    const lastSentDate = localStorage.getItem('lastNotificationDate');
+    if (!lastSentDate) {
+        return false;
+    }
+    const today = new Date().toISOString().split('T')[0];
+    return lastSentDate === today;
+}
+
+/**
+ * Marca que uma notificação foi enviada hoje.
+ */
+function markNotificationAsSentToday() {
+    const today = new Date().toISOString().split('T')[0];
+    localStorage.setItem('lastNotificationDate', today);
+}
+
+// Função para obter dados financeiros formatados para a IA
+function getFinancialDataForAI() {
+    const categoryMap = categories.reduce((map, cat) => {
+        map[cat.id] = cat.name;
+        return map;
+    }, {});
+
+    // Calcula resumos financeiros com base nos dados GLOBAIS
+    let totalGlobalIncome = 0;
+    let totalGlobalPaidExpenses = 0;
+    transactions.forEach(t => {
+        const isConfirmed = t.status === 'Recebido' || t.status === 'Pago' || t.status === 'Confirmado';
+        if (isConfirmed) {
+            if (t.type === 'income') totalGlobalIncome += parseFloat(t.amount);
+            else if (t.type === 'expense') totalGlobalPaidExpenses += parseFloat(t.amount);
+            else if (t.type === 'caixinha' && t.transactionType === 'deposit') totalGlobalPaidExpenses += parseFloat(t.amount);
+            else if (t.type === 'caixinha' && t.transactionType === 'withdraw') totalGlobalIncome += parseFloat(t.amount);
+        }
+    });
+    const cumulativeBalance = totalGlobalIncome - totalGlobalPaidExpenses;
+
+    const pendingTransactions = transactions.filter(t => t.status === 'Pendente' && t.categoryId !== 'unknown');
+    const totalPending = pendingTransactions.reduce((sum, t) => sum + parseFloat(t.amount), 0);
+    const countPending = pendingTransactions.length;
+
+    const totalCaixinhasSaved = categories
+        .filter(cat => cat.type === 'caixinha')
+        .reduce((sum, caixinha) => sum + parseFloat(caixinha.savedAmount || 0), 0);
+
+    // --- FORMATAÇÃO DA STRING PARA A IA ---
+    let dataString = `A data de hoje é ${new Date().toLocaleDateString('pt-BR')}.\n\n`;
+
+    // 1. Resumo Financeiro (Dados Pré-calculados)
+    dataString += "<strong>RESUMO FINANCEIRO (DADOS PRÉ-CALCULADOS):</strong>\n";
+    dataString += `- Saldo Total Disponível (Global): ${formatCurrency(cumulativeBalance)}\n`;
+    dataString += `- Quantidade de Despesas Pendentes: ${countPending}\n`;
+    dataString += `- Valor Total de Despesas Pendentes: ${formatCurrency(totalPending)}\n`;
+    dataString += `- Total Guardado em Caixinhas: ${formatCurrency(totalCaixinhasSaved)}\n\n`;
+
+    // 2. Lista de Transações Pendentes (se houver)
+    if (countPending > 0) {
+        dataString += "<strong>LISTA DETALHADA DE TRANSAÇÕES PENDENTES:</strong>\n";
+        const formattedTransactions = pendingTransactions.map(t => {
+            const categoryName = categoryMap[t.categoryId] || 'Desconhecida';
+            return `- Descrição: ${t.description}, Valor: ${formatCurrency(t.amount)}, Categoria: ${categoryName}`;
+        }).join('\n');
+        dataString += formattedTransactions;
+    } else {
+        dataString += "Nenhuma transação pendente no momento.\n";
+    }
+
+    dataString += "\n\n--- Fim dos Dados Financeiros ---\n";
+    return dataString;
+}
+
+
+/**
+ * Busca por transações pendentes que vencem amanhã e prepara o conteúdo para notificação.
+ * Gera também um insight diário da IA.
+ * Envia os dados para o Kodular via WebViewString.
+ */
+async function checkAndSendDailyNotification() {
+    // 1. Verifica se a notificação do dia já foi enviada para evitar spam
+    if (hasSentNotificationToday()) {
+        console.log("Notificação diária já enviada.");
+        return;
+    }
+
+    // 2. Verifica se a API de IA está pronta
+    if (!isGeminiApiReady) {
+        console.log("API da IA não está pronta. Abortando notificação.");
+        return;
+    }
+    
+    // 3. Encontra transações pendentes que vencem amanhã
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowStr = tomorrow.toISOString().split('T')[0];
+    
+    const upcomingTransactions = transactions.filter(t => t.date === tomorrowStr && t.status === 'Pendente');
+
+    // Monta a primeira parte da mensagem (se houver vencimentos)
+    let upcomingMessage = '';
+    if (upcomingTransactions.length > 0) {
+        const total = upcomingTransactions.reduce((sum, t) => sum + parseFloat(t.amount), 0);
+        const type = upcomingTransactions[0].type === 'income' ? 'recebimentos' : 'despesas';
+        upcomingMessage = `Atenção: Você tem ${upcomingTransactions.length} ${type} no valor de ${formatCurrency(total)} vencendo amanhã.`;
+    }
+
+    // 4. Gera um insight rápido da IA como resumo do dia
+    const insightPrompt = `
+        Analise os dados financeiros a seguir.
+        Sua tarefa é fornecer um insight MUITO CURTO e direto (máximo de 2 frases) para ser usado em uma notificação.
+        Foque em UMA informação útil para o usuário saber hoje, como o saldo atual ou o total de despesas pendentes.
+        Exemplo: "Seu saldo atual é de R$ 1.234,56 e você possui R$ 500,00 em contas pendentes."
+        Responda apenas com o texto do insight, sem formatação.
+
+        DADOS:
+        ${getFinancialDataForAI()}
+    `;
+
+    const payload = {
+        contents: [{ role: "user", parts: [{ text: insightPrompt }] }],
+        generationConfig: {
+            temperature: 0.5,
+            maxOutputTokens: 100
+        },
+    };
+    
+    let aiInsight = 'Abra o app para ver seus insights.'; // Mensagem padrão
+    try {
+        const result = await tryNextApiKey(payload, currentGeminiApiKeyIndex);
+        if (result.candidates && result.candidates[0].content.parts[0].text) {
+            aiInsight = result.candidates[0].content.parts[0].text.trim();
+        }
+    } catch (error) {
+        console.error("Erro ao gerar insight para notificação:", error);
+    }
+    
+    // 5. Combina as mensagens e só envia se houver algo relevante
+    let finalMessageBody = upcomingMessage;
+    if (finalMessageBody && aiInsight) {
+        finalMessageBody += `\n${aiInsight}`; // Adiciona o insight se houver lembrete
+    } else if (aiInsight) {
+        finalMessageBody = aiInsight; // Se não houver lembrete, usa só o insight
+    }
+
+    if (!finalMessageBody) {
+        console.log("Nenhum conteúdo relevante para notificar hoje.");
+        return; // Não envia notificação vazia
+    }
+    
+    // 6. Prepara o JSON para o Kodular
+    const notificationData = {
+        title: "Seu Resumo Financeiro Diário",
+        message: finalMessageBody
+    };
+    
+    // 7. Envia para o Kodular através do WebViewString
+    if (window.AppInventor && typeof window.AppInventor.setWebViewString === 'function') {
+        try {
+            const jsonString = JSON.stringify(notificationData);
+            window.AppInventor.setWebViewString(jsonString);
+            console.log("Enviando dados de notificação para o Kodular:", jsonString);
+            
+            // Marca a notificação como enviada para não repetir no mesmo dia
+            markNotificationAsSentToday();
+        } catch (e) {
+            console.error("Erro ao enviar dados para o Kodular:", e);
+        }
+    } else {
+        console.log("Interface do Kodular (WebViewString) não encontrada. A notificação não será enviada.");
+        // Em um ambiente de teste no navegador, você pode "simular" o envio aqui
+        // console.log("Simulação de notificação:", notificationData);
+        // markNotificationAsSentToday();
+    }
+}
+    
+// --- NOVO: Função para Enviar Notificação de Teste ---
+async function sendTestNotification() {
+    // 1. Verifica se a API de IA está pronta
+    if (!isGeminiApiReady) {
+        showToast("API da IA não está pronta. Configure suas chaves de API.", "error");
+        console.log("API da IA não está pronta. Abortando notificação de teste.");
+        return;
+    }
+    
+    // 2. Prepara o JSON para o Kodular com uma mensagem de teste
+    const notificationData = {
+        title: "Teste de Notificação",
+        message: "Esta é uma notificação de teste do Finanças Claras. Se você a recebeu, a integração está funcionando!"
+    };
+    
+    // 3. Envia para o Kodular através do WebViewString
+    if (window.AppInventor && typeof window.AppInventor.setWebViewString === 'function') {
+        try {
+            const jsonString = JSON.stringify(notificationData);
+            window.AppInventor.setWebViewString(jsonString);
+            showToast("Notificação de teste enviada!", "success");
+            console.log("Enviando dados de notificação de teste para o Kodular:", jsonString);
+        } catch (e) {
+            showToast(`Erro ao enviar notificação de teste: ${e.message}`, "error");
+            console.error("Erro ao enviar dados de teste para o Kodular:", e);
+        }
+    } else {
+        showToast("Interface do Kodular não encontrada.", "error");
+        console.log("Interface do Kodular (WebViewString) não encontrada. A notificação de teste não pôde ser enviada.");
+    }
+}
+
+
 // JavaScript para simular a navegação entre as seções/páginas
 document.addEventListener('DOMContentLoaded', async () => {
     // Elementos da Tela de Splash
@@ -305,11 +519,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     const dashboardPendingExpenses = document.getElementById('dashboard-pending-expenses');
     const dashboardTotalCaixinhasSaved = document.getElementById('dashboard-total-caixinhas-saved');
     
-    // NOVO: IDs do resumo compacto na tela de transações
+    // IDs do resumo compacto
     const compactBalance = document.getElementById('compact-balance');
     const compactPending = document.getElementById('compact-pending');
-    const compactSaved = document.getElementById('compact-saved');
-
+    const compactCaixinhas = document.getElementById('compact-caixinhas');
 
 
     // Elementos do Orçamento
@@ -394,6 +607,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // NOVO: Botão de Teste de Notificação
     const testNotificationButton = document.getElementById('test-notification-button');
+
+    // NOVO: Elementos do Modal de Ajuste de Saldo
+    const adjustBalanceButtonChat = document.getElementById('adjust-balance-button-chat');
+    const balanceAdjustmentModal = document.getElementById('balance-adjustment-modal');
+    const closeBalanceAdjustmentModalButton = document.getElementById('close-balance-adjustment-modal');
+    const cancelAdjustmentButton = document.getElementById('cancel-adjustment-button');
+    const balanceAdjustmentForm = document.getElementById('balance-adjustment-form');
+    const newBalanceAmountInput = document.getElementById('new-balance-amount');
 
 
     // Carrega todos os dados do Firestore
@@ -802,10 +1023,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (dashboardPendingExpenses) dashboardPendingExpenses.textContent = formatCurrency(totalPendingThisMonth);
         if (dashboardTotalCaixinhasSaved) dashboardTotalCaixinhasSaved.textContent = formatCurrency(totalCaixinhasSaved);
 
-        // Atualiza Cabeçalho Compacto na tela de Transações
+        // Atualiza resumo compacto
         if (compactBalance) compactBalance.textContent = formatCurrency(cumulativeBalance);
         if (compactPending) compactPending.textContent = formatCurrency(totalPendingThisMonth);
-        if (compactSaved) compactSaved.textContent = formatCurrency(totalCaixinhasSaved);
+        if (compactCaixinhas) compactCaixinhas.textContent = formatCurrency(totalCaixinhasSaved);
     }
 
 
@@ -1378,7 +1599,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 suggestCategoryButton.style.display = 'none';
                 balancePreviewContainer.classList.remove('hidden');
                 balancePreviewLabel.textContent = "Saldo Disponível para Guardar:";
-                balancePreviewValue.textContent = formatCurrency(parseFloat(compactBalance.textContent.replace('R$', '').replace('.', '').replace(',', '.')));
+                balancePreviewValue.textContent = formatCurrency(parseFloat(dashboardCurrentBalance.textContent.replace('R$', '').replace(/\./g, '').replace(',', '.')));
             } else if (selectedType === 'withdraw') {
                  suggestCategoryButton.style.display = 'none';
                  // A prévia para resgate será mostrada quando uma caixinha for selecionada
@@ -1901,61 +2122,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         chatMessagesDiv.scrollTop = chatMessagesDiv.scrollHeight;
     }
 
-    // Função para obter dados financeiros formatados para a IA
-    function getFinancialDataForAI() {
-        const categoryMap = categories.reduce((map, cat) => {
-            map[cat.id] = cat.name;
-            return map;
-        }, {});
-    
-        // Calcula resumos financeiros com base nos dados GLOBAIS
-        let totalGlobalIncome = 0;
-        let totalGlobalPaidExpenses = 0;
-        transactions.forEach(t => {
-            const isConfirmed = t.status === 'Recebido' || t.status === 'Pago' || t.status === 'Confirmado';
-            if (isConfirmed) {
-                if (t.type === 'income') totalGlobalIncome += parseFloat(t.amount);
-                else if (t.type === 'expense') totalGlobalPaidExpenses += parseFloat(t.amount);
-                else if (t.type === 'caixinha' && t.transactionType === 'deposit') totalGlobalPaidExpenses += parseFloat(t.amount);
-                else if (t.type === 'caixinha' && t.transactionType === 'withdraw') totalGlobalIncome += parseFloat(t.amount);
-            }
-        });
-        const cumulativeBalance = totalGlobalIncome - totalGlobalPaidExpenses;
-    
-        const pendingTransactions = transactions.filter(t => t.status === 'Pendente' && t.categoryId !== 'unknown');
-        const totalPending = pendingTransactions.reduce((sum, t) => sum + parseFloat(t.amount), 0);
-        const countPending = pendingTransactions.length;
-    
-        const totalCaixinhasSaved = categories
-            .filter(cat => cat.type === 'caixinha')
-            .reduce((sum, caixinha) => sum + parseFloat(caixinha.savedAmount || 0), 0);
-    
-        // --- FORMATAÇÃO DA STRING PARA A IA ---
-        let dataString = `A data de hoje é ${new Date().toLocaleDateString('pt-BR')}.\n\n`;
-    
-        // 1. Resumo Financeiro (Dados Pré-calculados)
-        dataString += "<strong>RESUMO FINANCEIRO (DADOS PRÉ-CALCULADOS):</strong>\n";
-        dataString += `- Saldo Total Disponível (Global): ${formatCurrency(cumulativeBalance)}\n`;
-        dataString += `- Quantidade de Despesas Pendentes: ${countPending}\n`;
-        dataString += `- Valor Total de Despesas Pendentes: ${formatCurrency(totalPending)}\n`;
-        dataString += `- Total Guardado em Caixinhas: ${formatCurrency(totalCaixinhasSaved)}\n\n`;
-    
-        // 2. Lista de Transações Pendentes (se houver)
-        if (countPending > 0) {
-            dataString += "<strong>LISTA DETALHADA DE TRANSAÇÕES PENDENTES:</strong>\n";
-            const formattedTransactions = pendingTransactions.map(t => {
-                const categoryName = categoryMap[t.categoryId] || 'Desconhecida';
-                return `- Descrição: ${t.description}, Valor: ${formatCurrency(t.amount)}, Categoria: ${categoryName}`;
-            }).join('\n');
-            dataString += formattedTransactions;
-        } else {
-            dataString += "Nenhuma transação pendente no momento.\n";
-        }
-    
-        dataString += "\n\n--- Fim dos Dados Financeiros ---\n";
-        return dataString;
-    }
-
     async function sendChatMessage(userMessage) {
         if (isSendingMessage) {
             return;
@@ -2395,7 +2561,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         closeBudgetOptimizationModalButton.addEventListener('click', closeBudgetOptimizationModal);
     }
     if (closeBudgetOptimizationButton) {
-        closeBudgetOptimizationButton.addEventListener('click', closeBudgetOptimizationButton);
+        closeBudgetOptimizationButton.addEventListener('click', closeBudgetOptimizationModal);
     }
 
 
@@ -2447,11 +2613,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Listener para os botões da Etapa 1
     document.querySelectorAll('.step-1-type-button').forEach(button => {
         button.addEventListener('click', () => {
+            const type = button.dataset.type;
+
+            // Se o tipo for 'adjust', abre o modal de ajuste e para a execução
+            if (type === 'adjust') {
+                openBalanceAdjustmentModal();
+                closeTransactionModal(); // Fecha o modal de transação que foi aberto
+                return;
+            }
+
             // Remove a classe 'selected' de todos os botões e adiciona ao clicado
             document.querySelectorAll('.step-1-type-button').forEach(btn => btn.classList.remove('selected'));
             button.classList.add('selected');
 
-            const type = button.dataset.type;
             // Marca o radio oculto correspondente
             document.querySelector(`input[name="transaction-type"][value="${type}"]`).checked = true;
                     
@@ -2463,7 +2637,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 withdraw: 'Resgatar Dinheiro'
             };
             step2Title.textContent = titleMap[type];
-            populateTransactionCategories(type); // Função que já deve existir no seu código
+            populateTransactionCategories(type);
                     
             goToStep(2);
         });
@@ -2505,49 +2679,52 @@ document.addEventListener('DOMContentLoaded', async () => {
     transactionDateInput.valueAsDate = new Date();
 
     // Event listeners para o novo modal de orçamento
-    document.getElementById('configure-budget-button').addEventListener('click', () => openBudgetModal());
-    closeBudgetModalButton.addEventListener('click', closeBudgetModal);
-    cancelBudgetButton.addEventListener('click', closeBudgetModal);
-    budgetAmountInput.addEventListener('input', () => formatCurrencyInput(budgetAmountInput));
+    if(configureBudgetButton) configureBudgetButton.addEventListener('click', () => openBudgetModal());
+    if(closeBudgetModalButton) closeBudgetModalButton.addEventListener('click', closeBudgetModal);
+    if(cancelBudgetButton) cancelBudgetButton.addEventListener('click', closeBudgetModal);
+    if(budgetAmountInput) budgetAmountInput.addEventListener('input', () => formatCurrencyInput(budgetAmountInput));
 
-    budgetForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const id = budgetIdInput.value;
-        const categoryId = budgetCategorySelect.value;
-        const amount = parseFloat(budgetAmountInput.value.replace(/\./g, '').replace(',', '.'));
-        
-        if (!categoryId || isNaN(amount) || amount <= 0) {
-            showConfirmationModal("Erro de Validação", "Por favor, selecione uma categoria e insira um valor válido.", () => {});
-            return;
-        }
-
-        // Verifica se já existe um orçamento para a categoria no mês atual, se não for edição
-        if (!id) {
-            const isAlreadyBudgeted = budgets.some(b => b.categoryId === categoryId && b.month === getCurrentMonthYYYYMM(currentMonth)); // Usa currentMonth
-            if (isAlreadyBudgeted) {
-                showConfirmationModal("Orçamento Existente", "Já existe um orçamento para esta categoria neste mês. Por favor, edite o orçamento existente ou selecione outra categoria.", () => {});
+    if(budgetForm) {
+        budgetForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = budgetIdInput.value;
+            const categoryId = budgetCategorySelect.value;
+            const amount = parseFloat(budgetAmountInput.value.replace(/\./g, '').replace(',', '.'));
+            
+            if (!categoryId || isNaN(amount) || amount <= 0) {
+                showConfirmationModal("Erro de Validação", "Por favor, selecione uma categoria e insira um valor válido.", () => {});
                 return;
             }
-        }
 
-        if (id) { // Editando
-            const index = budgets.findIndex(b => b.id === id);
-            if (index !== -1) {
-                budgets[index].amount = amount;
+            // Verifica se já existe um orçamento para a categoria no mês atual, se não for edição
+            if (!id) {
+                const isAlreadyBudgeted = budgets.some(b => b.categoryId === categoryId && b.month === getCurrentMonthYYYYMM(currentMonth)); // Usa currentMonth
+                if (isAlreadyBudgeted) {
+                    showConfirmationModal("Orçamento Existente", "Já existe um orçamento para esta categoria neste mês. Por favor, edite o orçamento existente ou selecione outra categoria.", () => {});
+                    return;
+                }
             }
-        } else { // Criando
-            const newBudget = {
-                id: generateUUID(),
-                categoryId: categoryId,
-                amount: amount,
-                month: getCurrentMonthYYYYMM(currentMonth) // Usa currentMonth
-            };
-            budgets.push(newBudget);
-        }
-        await saveBudgets(); // Função que salva o array 'budgets' no Firestore
-        showToast("Orçamento salvo com sucesso!", "success");
-        closeBudgetModal();
-    });
+
+            if (id) { // Editando
+                const index = budgets.findIndex(b => b.id === id);
+                if (index !== -1) {
+                    budgets[index].amount = amount;
+                }
+            } else { // Criando
+                const newBudget = {
+                    id: generateUUID(),
+                    categoryId: categoryId,
+                    amount: amount,
+                    month: getCurrentMonthYYYYMM(currentMonth) // Usa currentMonth
+                };
+                budgets.push(newBudget);
+            }
+            await saveBudgets(); // Função que salva o array 'budgets' no Firestore
+            showToast("Orçamento salvo com sucesso!", "success");
+            closeBudgetModal();
+        });
+    }
+
 
     // Adicione delegação de eventos para os botões de editar/excluir orçamentos
     budgetListContainer.addEventListener('click', (e) => {
@@ -3320,9 +3497,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     optimizeCategoriesButton.addEventListener('click', openCategoryOptimizationModal);
     closeCategoryOptimizationModalButton.addEventListener('click', closeCategoryOptimizationModal);
-    // Este botão não existe mais com este ID, removendo a referência para evitar erros.
-    // closeCategoryOptimizationButton.addEventListener('click', closeCategoryOptimizationModal);
-
+    if (closeCategoryOptimizationButton) {
+        closeCategoryOptimizationButton.addEventListener('click', closeCategoryOptimizationModal);
+    }
+    
     // Delegação de eventos para as ações de otimização de categoria
     categoryOptimizationSuggestions.addEventListener('click', async (e) => {
         const button = e.target.closest('button');
@@ -3621,173 +3799,85 @@ document.addEventListener('DOMContentLoaded', async () => {
     closeExpenseParserModalButton.addEventListener('click', closeExpenseParserModal);
     expenseParserForm.addEventListener('submit', parseExpensesWithAI);
 
+    // --- NOVO: Funções de Ajuste de Saldo ---
+    function openBalanceAdjustmentModal() {
+        balanceAdjustmentModal.classList.add('active');
+        balanceAdjustmentForm.reset();
+    }
+
+    function closeBalanceAdjustmentModal() {
+        balanceAdjustmentModal.classList.remove('active');
+    }
+
+    async function handleBalanceAdjustment(event) {
+        event.preventDefault();
+        const newBalanceFormatted = newBalanceAmountInput.value.replace(/\./g, '').replace(',', '.');
+        const newBalance = parseFloat(newBalanceFormatted);
+
+        if (isNaN(newBalance)) {
+            showToast("Por favor, insira um valor de saldo válido.", "error");
+            return;
+        }
+
+        const currentBalanceString = dashboardCurrentBalance.textContent.replace('R$', '').replace(/\./g, '').replace(',', '.').trim();
+        const currentBalance = parseFloat(currentBalanceString);
+
+        const difference = newBalance - currentBalance;
+
+        if (Math.abs(difference) < 0.01) {
+            showToast("O saldo informado é igual ao saldo atual. Nenhum ajuste necessário.", "info");
+            closeBalanceAdjustmentModal();
+            return;
+        }
+
+        const adjustmentType = difference > 0 ? 'income' : 'expense';
+        const adjustmentAmount = Math.abs(difference);
+
+        // Verifica se a categoria "Ajuste de Saldo" já existe
+        let adjustmentCategory = categories.find(c => c.name === "Ajuste de Saldo" && c.type === adjustmentType);
+
+        // Se não existir, cria uma
+        if (!adjustmentCategory) {
+            adjustmentCategory = {
+                id: generateUUID(),
+                name: "Ajuste de Saldo",
+                type: adjustmentType,
+                priority: null, // Ajustes não têm prioridade
+                color: '#778899' // Uma cor neutra como cinza ardósia
+            };
+            categories.push(adjustmentCategory);
+            await saveCategories(); // Salva a nova categoria no banco
+        }
+
+        // Cria a transação de ajuste
+        const adjustmentTransaction = {
+            id: generateUUID(),
+            description: "Ajuste manual de saldo",
+            amount: adjustmentAmount,
+            date: new Date().toISOString().split('T')[0], // Data de hoje
+            type: adjustmentType,
+            categoryId: adjustmentCategory.id,
+            status: adjustmentType === 'income' ? 'Recebido' : 'Pago' // Ajustes são sempre confirmados
+        };
+
+        await saveTransaction(adjustmentTransaction);
+
+        showToast("Saldo ajustado com sucesso!", "success");
+        closeBalanceAdjustmentModal();
+    }
+
+    if(adjustBalanceButtonChat) adjustBalanceButtonChat.addEventListener('click', openBalanceAdjustmentModal);
+    if(closeBalanceAdjustmentModalButton) closeBalanceAdjustmentModalButton.addEventListener('click', closeBalanceAdjustmentModal);
+    if(cancelAdjustmentButton) cancelAdjustmentButton.addEventListener('click', closeBalanceAdjustmentModal);
+    if(balanceAdjustmentForm) balanceAdjustmentForm.addEventListener('submit', handleBalanceAdjustment);
+    if(newBalanceAmountInput) newBalanceAmountInput.addEventListener('input', () => formatCurrencyInput(newBalanceAmountInput));
+
+    // --- NOVO: Event Listener para o Botão de Teste ---
+    if (testNotificationButton) {
+        testNotificationButton.addEventListener('click', (e) => {
+            e.preventDefault();
+            sendTestNotification();
+        });
+    }
+
 });
-
-// --- NOVO: Funções para Notificações Nativas via Kodular ---
-
-/**
- * Verifica se já foi enviada uma notificação hoje.
- * @returns {boolean} - True se uma notificação já foi enviada, false caso contrário.
- */
-function hasSentNotificationToday() {
-    const lastSentDate = localStorage.getItem('lastNotificationDate');
-    if (!lastSentDate) {
-        return false;
-    }
-    const today = new Date().toISOString().split('T')[0];
-    return lastSentDate === today;
-}
-
-/**
- * Marca que uma notificação foi enviada hoje.
- */
-function markNotificationAsSentToday() {
-    const today = new Date().toISOString().split('T')[0];
-    localStorage.setItem('lastNotificationDate', today);
-}
-
-/**
- * Busca por transações pendentes que vencem amanhã e prepara o conteúdo para notificação.
- * Gera também um insight diário da IA.
- * Envia os dados para o Kodular via WebViewString.
- */
-async function checkAndSendDailyNotification() {
-    // 1. Verifica se a notificação do dia já foi enviada para evitar spam
-    if (hasSentNotificationToday()) {
-        console.log("Notificação diária já enviada.");
-        return;
-    }
-
-    // 2. Verifica se a API de IA está pronta
-    if (!isGeminiApiReady) {
-        console.log("API da IA não está pronta. Abortando notificação.");
-        return;
-    }
-    
-    // 3. Encontra transações pendentes que vencem amanhã
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().split('T')[0];
-    
-    const upcomingTransactions = transactions.filter(t => t.date === tomorrowStr && t.status === 'Pendente');
-
-    // Monta a primeira parte da mensagem (se houver vencimentos)
-    let upcomingMessage = '';
-    if (upcomingTransactions.length > 0) {
-        const total = upcomingTransactions.reduce((sum, t) => sum + parseFloat(t.amount), 0);
-        const type = upcomingTransactions[0].type === 'income' ? 'recebimentos' : 'despesas';
-        upcomingMessage = `Atenção: Você tem ${upcomingTransactions.length} ${type} no valor de ${formatCurrency(total)} vencendo amanhã.`;
-    }
-
-    // 4. Gera um insight rápido da IA como resumo do dia
-    const insightPrompt = `
-        Analise os dados financeiros a seguir.
-        Sua tarefa é fornecer um insight MUITO CURTO e direto (máximo de 2 frases) para ser usado em uma notificação.
-        Foque em UMA informação útil para o usuário saber hoje, como o saldo atual ou o total de despesas pendentes.
-        Exemplo: "Seu saldo atual é de R$ 1.234,56 e você possui R$ 500,00 em contas pendentes."
-        Responda apenas com o texto do insight, sem formatação.
-
-        DADOS:
-        ${getFinancialDataForAI()}
-    `;
-
-    const payload = {
-        contents: [{ role: "user", parts: [{ text: insightPrompt }] }],
-        generationConfig: {
-            temperature: 0.5,
-            maxOutputTokens: 100
-        },
-    };
-    
-    let aiInsight = 'Abra o app para ver seus insights.'; // Mensagem padrão
-    try {
-        const result = await tryNextApiKey(payload, currentGeminiApiKeyIndex);
-        if (result.candidates && result.candidates[0].content.parts[0].text) {
-            aiInsight = result.candidates[0].content.parts[0].text.trim();
-        }
-    } catch (error) {
-        console.error("Erro ao gerar insight para notificação:", error);
-    }
-    
-    // 5. Combina as mensagens e só envia se houver algo relevante
-    let finalMessageBody = upcomingMessage;
-    if (finalMessageBody && aiInsight) {
-        finalMessageBody += `\n${aiInsight}`; // Adiciona o insight se houver lembrete
-    } else if (aiInsight) {
-        finalMessageBody = aiInsight; // Se não houver lembrete, usa só o insight
-    }
-
-    if (!finalMessageBody) {
-        console.log("Nenhum conteúdo relevante para notificar hoje.");
-        return; // Não envia notificação vazia
-    }
-    
-    // 6. Prepara o JSON para o Kodular
-    const notificationData = {
-        title: "Seu Resumo Financeiro Diário",
-        message: finalMessageBody
-    };
-    
-    // 7. Envia para o Kodular através do WebViewString
-    if (window.AppInventor && typeof window.AppInventor.setWebViewString === 'function') {
-        try {
-            const jsonString = JSON.stringify(notificationData);
-            window.AppInventor.setWebViewString(jsonString);
-            console.log("Enviando dados de notificação para o Kodular:", jsonString);
-            
-            // Marca a notificação como enviada para não repetir no mesmo dia
-            markNotificationAsSentToday();
-        } catch (e) {
-            console.error("Erro ao enviar dados para o Kodular:", e);
-        }
-    } else {
-        console.log("Interface do Kodular (WebViewString) não encontrada. A notificação não será enviada.");
-        // Em um ambiente de teste no navegador, você pode "simular" o envio aqui
-        // console.log("Simulação de notificação:", notificationData);
-        // markNotificationAsSentToday();
-    }
-}
-    
-// --- NOVO: Função para Enviar Notificação de Teste ---
-async function sendTestNotification() {
-    // 1. Verifica se a API de IA está pronta
-    if (!isGeminiApiReady) {
-        showToast("API da IA não está pronta. Configure suas chaves de API.", "error");
-        console.log("API da IA não está pronta. Abortando notificação de teste.");
-        return;
-    }
-    
-    // 2. Prepara o JSON para o Kodular com uma mensagem de teste
-    const notificationData = {
-        title: "Teste de Notificação",
-        message: "Esta é uma notificação de teste do Finanças Claras. Se você a recebeu, a integração está funcionando!"
-    };
-    
-    // 3. Envia para o Kodular através do WebViewString
-    if (window.AppInventor && typeof window.AppInventor.setWebViewString === 'function') {
-        try {
-            const jsonString = JSON.stringify(notificationData);
-            window.AppInventor.setWebViewString(jsonString);
-            showToast("Notificação de teste enviada!", "success");
-            console.log("Enviando dados de notificação de teste para o Kodular:", jsonString);
-        } catch (e) {
-            showToast(`Erro ao enviar notificação de teste: ${e.message}`, "error");
-            console.error("Erro ao enviar dados de teste para o Kodular:", e);
-        }
-    } else {
-        showToast("Interface do Kodular não encontrada.", "error");
-        console.log("Interface do Kodular (WebViewString) não encontrada. A notificação de teste não pôde ser enviada.");
-    }
-}
-
-// --- NOVO: Event Listener para o Botão de Teste ---
-if (testNotificationButton) {
-    testNotificationButton.addEventListener('click', (e) => {
-        e.preventDefault();
-        sendTestNotification();
-    });
-}
-
-      
-
-
