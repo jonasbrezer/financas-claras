@@ -488,41 +488,33 @@ body.chat-active main {
 
 /* NOVO: Estilos para o cabeçalho compacto de resumo */
 .compact-summary-header {
+    background-color: white;
+    border-radius: 0.75rem; /* rounded-lg */
+    padding: 0.75rem 1rem; /* p-3 p-4 */
+    margin-bottom: 1rem; /* mb-4 */
     display: flex;
-    justify-content: space-around;
+    justify-content: space-between;
     align-items: center;
-    background-color: #ffffff;
-    padding: 0.75rem; /* 12px */
-    border-radius: 0.75rem; /* 12px */
-    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
-    margin-bottom: 1rem; /* 16px */
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1); /* shadow-sm */
 }
 
 .compact-summary-item {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem; /* 8px */
+    text-align: center;
+    flex-grow: 1;
 }
 
-.compact-summary-item i {
-    font-size: 1.125rem; /* 18px */
-}
-
-.compact-summary-item div {
-    display: flex;
-    flex-direction: column;
-}
-
-.compact-summary-item .label {
-    font-size: 0.75rem; /* 12px */
+.compact-summary-label {
+    display: block;
+    font-size: 0.75rem; /* text-xs */
     color: #6b7280; /* text-gray-500 */
+    margin-bottom: 0.125rem; /* mb-0.5 */
 }
 
-.compact-summary-item .value {
-    font-size: 0.875rem; /* 14px */
+.compact-summary-value {
+    font-size: 1rem; /* text-base */
     font-weight: 600; /* font-semibold */
-    color: #1f2937; /* text-gray-800 */
 }
+
 
 /* NOVO: Estilos para os filtros em pílula */
 .filter-pills-container {
@@ -622,6 +614,48 @@ body.chat-active main {
     padding: 4px 0;
 }
 
+/* NOVOS Estilos para os cards de resumo no dashboard */
+.summary-card {
+    color: white;
+    padding: 1rem;
+    border-radius: 0.75rem;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.1);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+.summary-card.summary-card-positive {
+    background-color: var(--color-option-icon-green);
+}
+
+.summary-card.summary-card-negative {
+    background-color: #4b5563; /* bg-gray-600 */
+}
+
+.summary-card-header {
+    display: flex;
+    align-items: center;
+    color: rgba(255, 255, 255, 0.85);
+    margin-bottom: 0.5rem;
+}
+
+.summary-card-title {
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.summary-card-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: white;
+}
     
 
       
+
+    
+
+
+
+
