@@ -121,29 +121,6 @@ function formatMonthDisplay(date) {
     return date.toLocaleDateString('pt-BR', options);
 }
 
-// --- NOVO: Funções para Notificações Nativas via Kodular ---
-
-/**
- * Verifica se já foi enviada uma notificação hoje.
- * @returns {boolean} - True se uma notificação já foi enviada, false caso contrário.
- */
-function hasSentNotificationToday() {
-    const lastSentDate = localStorage.getItem('lastNotificationDate');
-    if (!lastSentDate) {
-        return false;
-    }
-    const today = new Date().toISOString().split('T')[0];
-    return lastSentDate === today;
-}
-
-/**
- * Marca que uma notificação foi enviada hoje.
- */
-function markNotificationAsSentToday() {
-    const today = new Date().toISOString().split('T')[0];
-    localStorage.setItem('lastNotificationDate', today);
-}
-
 // Função para obter dados financeiros formatados para a IA
 function getFinancialDataForAI() {
     const categoryMap = categories.reduce((map, cat) => {
@@ -197,6 +174,95 @@ function getFinancialDataForAI() {
 
     dataString += "\n\n--- Fim dos Dados Financeiros ---\n";
     return dataString;
+}
+
+
+// --- NOVO: Funções para Notificações Nativas via Kodular ---
+
+/**
+ * Verifica se já foi enviada uma notificação hoje.
+ * @returns {boolean} - True se uma notificação já foi enviada, false caso contrário.
+ */
+function hasSentNotificationToday() {
+    const lastSentDate = localStorage.getItem('lastNotificationDate');
+    if (!lastSentDate) {
+        return false;
+    }
+    const today = new Date().toISOString().split('T')[0];
+    return lastSentDate === today;
+}
+
+/**
+ * Marca que uma notificação foi enviada hoje.
+ */
+function markNotificationAsSentToday() {
+    const today = new Date().toISOString().split('T')[0];
+    localStorage.setItem('lastNotificationDate', today);
+}
+
+/**
+ * Tenta executar uma chamada à API Gemini usando uma chave específica, com lógica de retentativa.
+ * Se a chave falhar com um erro de cota, tenta a próxima chave na lista.
+ * @param {object} payload - O corpo da requisição para a API Gemini.
+ * @param {number} attemptIndex - O índice da chave a ser tentada.
+ * @param {number} retryCount - O número de tentativas já feitas para esta chave.
+ * @returns {Promise<object>} - O resultado da API em caso de sucesso.
+ * @throws {Error} - Se todas as chaves falharem.
+ */
+async function tryNextApiKey(payload, attemptIndex = 0, retryCount = 0) {
+    const validKeys = geminiApiKeys.filter(key => key && key.trim() !== '');
+    if (attemptIndex >= validKeys.length) {
+        throw new Error("Todas as chaves de API falharam ou estão sem cota.");
+    }
+
+    const apiKey = validKeys[attemptIndex];
+    const model = payload.generationConfig && payload.generationConfig.response_mime_type === "application/json" ? "gemini-1.5-flash-latest" : "gemini-1.5-flash-latest";
+    const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+    
+    console.log(`Tentando API com a chave ${attemptIndex + 1} (Tentativa ${retryCount + 1}) e modelo ${model}...`);
+
+    try {
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const errorResult = await response.json();
+            const errorMessage = errorResult.error ? errorResult.error.message : response.statusText;
+            console.error(`Erro da API com a chave ${attemptIndex + 1}:`, errorMessage);
+
+            // Erros que indicam que devemos tentar a PRÓXIMA chave imediatamente (ex: chave inválida, suspensa)
+            if (response.status === 400 || response.status === 403) {
+                 console.warn(`Chave ${attemptIndex + 1} inválida ou suspensa. Pulando para a próxima.`);
+                 return tryNextApiKey(payload, attemptIndex + 1, 0); // Tenta a próxima chave, reseta a contagem de retentativas
+            }
+
+            // Erros que indicam que devemos TENTAR NOVAMENTE a MESMA chave (ex: sobrecarga, erro de servidor)
+            if ((response.status === 429 || response.status === 503) && retryCount < 3) {
+                const delay = Math.pow(2, retryCount) * 1000 + Math.random() * 1000; // Exponential backoff
+                console.warn(`Serviço sobrecarregado. Tentando novamente a chave ${attemptIndex + 1} em ${Math.round(delay/1000)}s.`);
+                await new Promise(resolve => setTimeout(resolve, delay));
+                return tryNextApiKey(payload, attemptIndex, retryCount + 1); // Tenta a mesma chave novamente
+            }
+            
+            // Se as retentativas falharam para esta chave, tenta a próxima
+            return tryNextApiKey(payload, attemptIndex + 1, 0);
+        }
+
+        const result = await response.json();
+        
+        // Se a chave funcionou, atualiza o índice global e o indicador visual
+        currentGeminiApiKeyIndex = geminiApiKeys.indexOf(apiKey);
+        updateActiveApiKeyIndicator();
+        return result; // Retorna o resultado bem-sucedido
+
+    } catch (error) {
+        console.error(`Erro de rede ou desconhecido com a chave ${attemptIndex + 1}:`, error);
+        // Em caso de erro de rede, tenta a próxima chave
+        return tryNextApiKey(payload, attemptIndex + 1, 0);
+    }
 }
 
 
@@ -255,7 +321,7 @@ async function checkAndSendDailyNotification() {
     
     let aiInsight = 'Abra o app para ver seus insights.'; // Mensagem padrão
     try {
-        const result = await tryNextApiKey(payload, currentGeminiApiKeyIndex);
+        const result = await tryNextApiKey(payload);
         if (result.candidates && result.candidates[0].content.parts[0].text) {
             aiInsight = result.candidates[0].content.parts[0].text.trim();
         }
@@ -332,6 +398,41 @@ async function sendTestNotification() {
         showToast("Interface do Kodular não encontrada.", "error");
         console.log("Interface do Kodular (WebViewString) não encontrada. A notificação de teste não pôde ser enviada.");
     }
+}
+
+// Função para exibir um toast (notificação flutuante)
+function showToast(message, type = 'info') {
+    const container = document.getElementById('toast-container');
+    if (!container) return; // Se o container não existe, não faz nada
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+
+    const icons = {
+        success: 'fa-solid fa-circle-check',
+        error: 'fa-solid fa-circle-xmark',
+        info: 'fa-solid fa-circle-info'
+    };
+
+    toast.innerHTML = `
+        <i class="${icons[type]}"></i>
+        <span>${message}</span>
+    `;
+    
+    container.appendChild(toast);
+
+    // Trigger the animation
+    setTimeout(() => {
+        toast.classList.add('show');
+    }, 100);
+
+    // Remove the toast after 3 seconds
+    setTimeout(() => {
+        toast.classList.remove('show');
+        // Remove the element from DOM after the fade out animation
+        toast.addEventListener('transitionend', () => {
+            toast.remove();
+        });
+    }, 3000);
 }
 
 
@@ -476,7 +577,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const transactionDescriptionInput = document.getElementById('transaction-description');
     const transactionAmountInput = document.getElementById('transaction-amount');
     const transactionDateInput = document.getElementById('transaction-date');
-    const suggestCategoryButton = document.getElementById('suggest-category-button');
     const addCategoryQuickButton = document.getElementById('add-category-quick-button'); // NOVO BOTÃO
     // Os radios de transaction-type agora são ocultos e controlados pelos botões da Etapa 1
     const transactionTypeRadios = document.querySelectorAll('input[name="transaction-type"]'); 
@@ -1596,16 +1696,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             // Mostra ou esconde o botão de sugestão de IA e a prévia de saldo
             if (selectedType === 'deposit') {
-                suggestCategoryButton.style.display = 'none';
                 balancePreviewContainer.classList.remove('hidden');
                 balancePreviewLabel.textContent = "Saldo Disponível para Guardar:";
                 balancePreviewValue.textContent = formatCurrency(parseFloat(dashboardCurrentBalance.textContent.replace('R$', '').replace(/\./g, '').replace(',', '.')));
             } else if (selectedType === 'withdraw') {
-                 suggestCategoryButton.style.display = 'none';
                  // A prévia para resgate será mostrada quando uma caixinha for selecionada
                  balancePreviewContainer.classList.add('hidden');
             } else {
-                suggestCategoryButton.style.display = 'inline-flex';
                 balancePreviewContainer.classList.add('hidden');
             }
 
@@ -2030,63 +2127,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             budgetListContainer.appendChild(budgetCard);
         });
     }
-
+    
     // --- Funções de Chat e IA ---
-
-    /**
-     * Tenta executar uma chamada à API Gemini usando uma chave específica.
-     * Se a chave falhar com um erro de cota, tenta a próxima chave na lista.
-     * @param {object} payload - O corpo da requisição para a API Gemini.
-     * @param {number} attemptIndex - O índice da chave a ser tentada.
-     * @returns {Promise<object>} - O resultado da API em caso de sucesso.
-     * @throws {Error} - Se todas as chaves falharem.
-     */
-    async function tryNextApiKey(payload, attemptIndex) {
-        const validKeys = geminiApiKeys.filter(key => key && key.trim() !== '');
-        if (attemptIndex >= validKeys.length) {
-            throw new Error("Todas as chaves de API falharam ou estão sem cota.");
-        }
-
-        const apiKey = validKeys[attemptIndex];
-        const model = payload.generationConfig && payload.generationConfig.response_mime_type === "application/json" ? "gemini-1.5-flash-latest" : "gemini-1.5-flash-latest";
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-        
-        console.log(`Tentando API com a chave ${attemptIndex + 1} e modelo ${model}...`);
-
-        try {
-            const response = await fetch(apiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-
-            if (!response.ok) {
-                // Se a resposta não for OK, trata como erro e tenta a próxima chave
-                const errorResult = await response.json();
-                const errorMessage = errorResult.error ? errorResult.error.message : response.statusText;
-                console.error(`Erro da API com a chave ${attemptIndex + 1}:`, errorMessage);
-
-                if (response.status === 429 || (errorMessage && errorMessage.includes("resource has been exhausted"))) {
-                    console.warn(`Chave ${attemptIndex + 1} atingiu o limite de cota. Tentando a próxima.`);
-                    return tryNextApiKey(payload, attemptIndex + 1);
-                }
-                // Outros erros
-                throw new Error(`Erro da API: ${errorMessage}`);
-            }
-
-            const result = await response.json();
-            
-            // Se a chave funcionou, atualiza o índice global e o indicador visual
-            currentGeminiApiKeyIndex = geminiApiKeys.indexOf(apiKey);
-            updateActiveApiKeyIndicator();
-            return result; // Retorna o resultado bem-sucedido
-
-        } catch (error) {
-            console.error(`Erro de rede ou desconhecido com a chave ${attemptIndex + 1}:`, error);
-            // Em caso de erro de rede, também tenta a próxima chave
-            return tryNextApiKey(payload, attemptIndex + 1);
-        }
-    }
     
     // Função para atualizar o indicador visual da chave de API ativa
     function updateActiveApiKeyIndicator() {
@@ -2154,7 +2196,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 2.  <strong>USE OS TOTAIS FORNECIDOS:</strong> Para responder sobre saldos, totais ou quantidades, você **DEVE** usar os valores pré-calculados que estão na seção "RESUMO FINANCEIRO (DADOS PRÉ-CALCULADOS)". Por exemplo, se perguntarem o número de despesas pendentes, use o valor de "Quantidade de Despesas Pendentes".
 3.  <strong>SEJA UM APRESENTADOR DE DADOS:</strong> Sua principal função é apresentar os dados que foram fornecidos a você. Se o usuário pedir para listar as despesas pendentes, use a "LISTA DETALHADA DE TRANSAÇÕES PENDENTES".
 4.  <strong>BASEADO EM DADOS, SEM ALARMISMO:</strong> Suas análises devem ser 100% baseadas nos dados fornecidos. Não use linguagem alarmista como "situação crítica". Em vez disso, aponte os fatos. Ex: "Observei que o valor total de suas despesas pendentes é maior que o seu saldo disponível."
-5.  <strong>NÃO PEÇA INFORMAÇÕES:</strong> Você já tem todos os dados. NUNCA peça ao usuário para registrar transações. Se uma informação não está no resumo, diga que não a encontrou.
+5.  <strong>NÃO PEÇA INFORMAÇÕES NEM REALIZE AÇÕES:</strong> Você já tem todos os dados. Você não pode adicionar, editar ou apagar nada. NUNCA peça ao usuário para registrar transações ou sugira que você pode fazer algo por ele. Se uma informação não está no resumo, diga que não a encontrou.
 6.  <strong>PERSONA E FORMATAÇÃO:</strong> Siga estritamente o papel e o tom definidos abaixo e use apenas HTML básico (<strong>, <br>, <ul>, <li>). NUNCA use Markdown.
     *   <strong>Personagem:</strong> ${persona}
     *   <strong>Personalidade:</strong> ${personality}
@@ -2185,7 +2227,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         };
 
         try {
-            let result = await tryNextApiKey(payload, currentGeminiApiKeyIndex);
+            let result = await tryNextApiKey(payload);
         
             if (result && result.candidates && result.candidates[0].content.parts[0].text) {
                 const finalResponse = result.candidates[0].content.parts[0].text;
@@ -2262,7 +2304,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         };
 
         try {
-            const result = await tryNextApiKey(payload, currentGeminiApiKeyIndex);
+            const result = await tryNextApiKey(payload);
 
             if (result.candidates && result.candidates.length > 0 &&
                 result.candidates[0].content && result.candidates[0].content.parts &&
@@ -2335,7 +2377,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         };
 
         try {
-            const result = await tryNextApiKey(payload, currentGeminiApiKeyIndex);
+            const result = await tryNextApiKey(payload);
             
             if (result.candidates && result.candidates.length > 0 &&
                 result.candidates[0].content && result.candidates[0].content.parts &&
@@ -2754,7 +2796,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             type: [
                 { label: 'Receitas', value: 'income' },
                 { label: 'Despesas', value: 'expense' },
-                { label: 'Caixinhas', value: 'caixinha' }
             ],
             status: [
                 { label: 'Pagos', value: 'Pago' },
@@ -3203,148 +3244,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         renderChart();
     });
 
-
-    // --- Funções de Notificação (Toast) ---
-    function showToast(message, type = 'info') {
-        const container = document.getElementById('toast-container');
-        if (!container) return; // Se o container não existe, não faz nada
-        const toast = document.createElement('div');
-        toast.className = `toast ${type}`;
-
-        const icons = {
-            success: 'fa-solid fa-circle-check',
-            error: 'fa-solid fa-circle-xmark',
-            info: 'fa-solid fa-circle-info'
-        };
-
-        toast.innerHTML = `
-            <i class="${icons[type]}"></i>
-            <span>${message}</span>
-        `;
-        
-        container.appendChild(toast);
-
-        // Trigger the animation
-        setTimeout(() => {
-            toast.classList.add('show');
-        }, 100);
-
-        // Remove the toast after 3 seconds
-        setTimeout(() => {
-            toast.classList.remove('show');
-            // Remove the element from DOM after the fade out animation
-            toast.addEventListener('transitionend', () => {
-                toast.remove();
-            });
-        }, 3000);
-    }
-
-    // --- NOVO: Função de Sugestão de Categoria com IA ---
-    async function suggestCategoryFromAI() {
-        const description = transactionDescriptionInput.value.trim();
-        const button = suggestCategoryButton;
-
-        if (!description) {
-            showToast("Por favor, digite uma descrição para a IA sugerir uma categoria.", "info");
-            return;
-        }
-
-        const validKeys = geminiApiKeys.filter((key) => key && key.trim() !== "");
-        if (!isGeminiApiReady || validKeys.length === 0) {
-            showToast("O assistente de IA não está configurado. Verifique suas chaves de API.", "error");
-            return;
-        }
-
-        button.disabled = true;
-        button.innerHTML = '<div class="animate-spin rounded-full h-5 w-5 border-b-2 border-gray-900"></div>';
-
-        const transactionType = document.querySelector('input[name="transaction-type"]:checked').value;
-        
-        // Passa as categorias existentes com seus tipos e prioridades
-        const existingCategories = categories
-            .filter(c => c.type === transactionType)
-            .map(c => ({ name: c.name, priority: c.priority }));
-
-        const prompt = `
-            Você é um assistente financeiro especialista em categorização.
-            Analise a descrição da transação: "${description}".
-            As categorias de ${transactionType === 'income' ? 'receita' : 'despesa'} existentes são: ${JSON.stringify(existingCategories)}.
-            
-            Sua tarefa é retornar um objeto JSON com a seguinte estrutura:
-            {
-              "suggestedCategoryName": "nome da categoria",
-              "isNew": boolean,
-              "type": "${transactionType}",
-              "priority": "essential" ou "non-essential" (apenas se for uma nova despesa)
-            }
-
-            REGRAS CRÍTICAS:
-            1. FAÇA UMA ANÁLISE SEMÂNTICA PROFUNDA. Compare o significado da descrição com o das categorias existentes.
-            2. ANÁLISE DE PRIORIDADE: Analise a descrição por palavras como "essencial", "necessário", "básico" vs. "não essencial", "supérfluo", "lazer", "desejo".
-            3. Se a descrição se encaixa LOGICAMENTE em uma categoria existente E a prioridade (se inferida ou explícita na descrição) NÃO CONFLITA com a prioridade da categoria existente, PREFIRA USAR a categoria existente. Defina "isNew" como false.
-            4. Se a descrição tem o mesmo tema de uma categoria existente (ex: "Mercado"), mas a prioridade inferida da descrição (ex: "não essencial" para "salgadinhos") é DIFERENTE da prioridade da categoria existente (ex: "Mercado Essencial" que é "essential"), você DEVE sugerir uma NOVA categoria com um nome que reflita essa diferença (ex: "Mercado (Lazer)"). Defina "isNew" como true.
-            5. Só sugira uma nova categoria (isNew: true) se a descrição for CLARAMENTE distinta de TODAS as categorias existentes OU se houver o conflito de prioridade descrito na regra 4.
-            6. Se for uma nova despesa, determine se é "essential" (moradia, alimentação básica, saúde, transporte essencial) ou "non-essential" (lazer, hobbies, compras não essenciais, etc.).
-            7. Responda APENAS com o objeto JSON. Não inclua \`\`\`json ou qualquer outro texto.
-        `;
-
-        const payload = {
-            contents: [{ parts: [{ text: prompt }] }],
-            generationConfig: {
-                response_mime_type: "application/json",
-            },
-        };
-
-        try {
-            const result = await tryNextApiKey(payload, currentGeminiApiKeyIndex);
-            
-            if (!result.candidates || !result.candidates[0].content.parts[0].text) {
-                throw new Error("Resposta da IA inválida.");
-            }
-            
-            const suggestion = JSON.parse(result.candidates[0].content.parts[0].text);
-            
-            if (suggestion.isNew) {
-                showConfirmationModal(
-                    "Nova Categoria Sugerida",
-                    `A IA sugere a nova categoria "${suggestion.suggestedCategoryName}". Deseja criá-la como uma ${suggestion.type === 'income' ? 'receita' : 'despesa ' + (suggestion.priority || '')}?`,
-                    async () => {
-                        const newCategory = {
-                            id: generateUUID(),
-                            name: suggestion.suggestedCategoryName,
-                            type: suggestion.type,
-                            priority: suggestion.priority || null,
-                            color: getNextAvailableColor(suggestion.type, suggestion.priority)
-                        };
-                        categories.push(newCategory);
-                        await saveCategories();
-                        showToast(`Categoria "${newCategory.name}" criada com sucesso!`, "success");
-                        
-                        populateTransactionCategories(newCategory.type);
-                        transactionCategorySelect.value = newCategory.id;
-                    }
-                );
-            } else {
-                const existingCategory = categories.find(c => c.name.toLowerCase() === suggestion.suggestedCategoryName.toLowerCase() && c.type === suggestion.type);
-                if (existingCategory) {
-                    showToast(`Categoria sugerida: ${existingCategory.name}`, "success");
-                    transactionCategorySelect.value = existingCategory.id;
-                } else {
-                    showToast(`A categoria sugerida "${suggestion.suggestedCategoryName}" não foi encontrada.`, "error");
-                }
-            }
-
-        } catch (error) {
-            console.error("Erro ao sugerir categoria:", error);
-            showToast("Não foi possível sugerir uma categoria.", "error");
-        } finally {
-            button.disabled = false;
-            button.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i>';
-        }
-    }
-    
-    suggestCategoryButton.addEventListener('click', suggestCategoryFromAI);
-
     // Listener para o novo botão de adicionar categoria rápido
     addCategoryQuickButton.addEventListener('click', () => {
         // Abre o modal de categoria, mas não passa nenhum objeto, então ele abre em modo de adição
@@ -3442,7 +3341,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         };
 
         try {
-            const result = await tryNextApiKey(payload, currentGeminiApiKeyIndex);
+            const result = await tryNextApiKey(payload);
             if (!result.candidates || !result.candidates[0].content.parts[0].text) {
                 throw new Error("Resposta da IA inválida ao otimizar categorias.");
             }
@@ -3767,7 +3666,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         };
 
         try {
-            const result = await tryNextApiKey(payload, currentGeminiApiKeyIndex);
+            const result = await tryNextApiKey(payload);
             if (!result.candidates || !result.candidates[0].content.parts[0].text) {
                 throw new Error("Resposta da IA inválida ao analisar despesas.");
             }
@@ -3868,7 +3767,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if(adjustBalanceButtonChat) adjustBalanceButtonChat.addEventListener('click', openBalanceAdjustmentModal);
     if(closeBalanceAdjustmentModalButton) closeBalanceAdjustmentModalButton.addEventListener('click', closeBalanceAdjustmentModal);
-    if(cancelAdjustmentButton) cancelAdjustmentButton.addEventListener('click', closeBalanceAdjustmentModal);
+    if(cancelAdjustmentButton) cancelAdjustmentButton.addEventListener('click', cancelAdjustmentButton);
     if(balanceAdjustmentForm) balanceAdjustmentForm.addEventListener('submit', handleBalanceAdjustment);
     if(newBalanceAmountInput) newBalanceAmountInput.addEventListener('input', () => formatCurrencyInput(newBalanceAmountInput));
 
@@ -3881,3 +3780,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
 });
+
+
+
+
